@@ -1,4 +1,4 @@
 kynalyze
 ========
 
-Python package for analyzing stochastic multistate dynamics... obscure enough?
+Python package for analyzing stochastic multistate dynamics... obscure enough? TEST CHANGE.
