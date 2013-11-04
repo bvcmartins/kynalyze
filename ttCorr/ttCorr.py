@@ -14,10 +14,7 @@ col2='#03899C'
 col3='#D2006B'
 col4='#619A00'
 
-numbin=300
-Imax=100
-Fs=1e4
-
+#DELETE THIS CLASS AS SOON AS YOU UPDATE THE PICKLES ... SO IMPORTANT TO KEEP YOUR PICKLES UP TO DATE!
 class TraceSet:
   def __init__(self):
         self.Pneg = np.nan
@@ -40,25 +37,175 @@ class TraceSet:
         self.D = np.nan
         self.filname=''
 
+class TRACE:
+  '''
+  This class is the basic structure that will hold the data for a current trace. We start
+  by simply assigning it a filename. Through Analyze.py, we fill in the rest of the data.
+  It is important that there not be any "big data" in here, so that we can pass the object
+  around without difficulty.
+  '''
+  def __init__(self,fname,numbin=300,Imax=100,Fs=None):
+    
+    MESSAGE='Initiating trace object for: '+fname;
+    print '-'*len(MESSAGE)
+    print MESSAGE
+    print '-'*len(MESSAGE)+'\n'
+    
+    #basic info
+    self.filename=fname
+    self.dataset=''
+    self.numbin=numbin
+    self.Imax=Imax
+    self.I = np.nan
+    if Fs==None:
+      succ=False
+      while succ==False:
+        IN=raw_input("What is the sample rate? (e.g. 1e4) : ")
+        try:
+          #float(IN)
+          self.Fs=float(IN)
+          succ=True
+        except ValueError:
+          if IN!='':print "Whakina turkey jive is this?"
+        
+    #experimental parameters
+    self.bias = np.nan
+    self.POStip = np.nan
+    self.POSdb = np.nan
+    self.dist = np.nan
+    #histogram
+    self.bins = np.nan
+    self.x = np.nan
+    self.n = np.nan
+    #Gaussian fit
+    self.histtype = '3' # should only have certain allowed values: ['3','2neg','2pos','1neg','1pos']
+    self.params = np.nan
+    ###the following should be derived from the above, not independently assigned
+    self.Pneg = np.nan
+    self.Pneu = np.nan
+    self.Ppos = np.nan
+    self.Aneg = np.nan
+    self.SIGneg = np.nan
+    self.MUneg = np.nan
+    self.Aneu = np.nan
+    self.SIGneu = np.nan
+    self.MUneu = np.nan
+    self.Apos = np.nan
+    self.SIGpos = np.nan
+    self.MUpos = np.nan
+    #rates
+    self.a = np.nan
+    self.b = np.nan
+    self.c = np.nan
+    self.d = np.nan
+
+####
+
+def get_scanparams(TR):
+  if open(TR.filename,'rU').readline()[:3]=='Exp':
+    x=np.array([0.0000000020128,0.000000002108307,0.000000002205033,0.000000002304373,0.000000002404483,0.000000002506767,0.000000002609444,0.000000002714023,0.000000002819564,0.000000002925106,0.000000003032267,0.000000003139197,0.000000003247665,0.000000003356696,0.000000003465344,0.00000000357534,0.000000003684857,0.000000003795656,0.000000003905897,0.000000004017367,0.000000004129093,0.000000004240215,0.000000004352506,0.000000004464105])
+    x=[i*10**9 for i in x]
+    BIASstring=TR.filename[-13]+'.'+TR.filename[-10:-8]
+    BIAS=float(BIASstring)
+    NUMstring=TR.filename[-7:-4]
+    NUM=int(NUMstring)
+    DIST=x[NUM-1]
+    TR.bias=BIAS
+    TR.dist=DIST
+  else:
+    f=open(TR.filename[:-7]+'.dat','rU')
+    NUMPT=float(TR.filename[-7:-4])
+    START=f.readline().split('      ')[1:]
+    START=[float(start) for start in START]
+    END=f.readline().split('      ')[1:]
+    END=[float(end) for end in END]
+    NUMPTS=int(f.readline().split('  ')[1])
+    BIAS=float(f.readline().split()[1])
+    TR.POStip=[START[0]+(END[0]-START[0])*NUMPT/NUMPTS,START[1]+(END[1]-START[1])*NUMPT/NUMPTS]
+    TR.POSdb=END
+    TR.bias=BIAS
+    TR.dist=sqrt(sum((np.array(TR.POStip)-np.array(TR.POSdb))**2))
+  return TR
+
+# get data
+def getItrace(TR):
+  f=open(TR.filename,'rU')
+  cond=True
+  if f.readline()[:3]=='Exp':
+    for x in range(35):f.readline()   #skip header
+    data=f.readlines() 
+    Ifwd=[dt.split()[1] for dt in data]
+    Ibwd=[dt.split()[2] for dt in data]
+    Ibwd.reverse()
+    I=[]
+    I.extend(Ifwd)
+    I.extend(Ibwd)
+    I=[float(i)*1E12 for i in I]    #change units to pA
+  else: #assume that it's one of my simple data files
+    data=f.readlines()
+    I=[float(dt.split()[1])*1E12 for dt in data]
+  TR.I=I
+  return TR
+
+#make histogram data
+def getHist(TR):
+  n,bins=np.histogram(TR.I,bins=np.linspace(0,TR.Imax,TR.numbin+1))
+  TR.n=n
+  TR.bins=bins
+  TR.x=[0.5*(bins[k]+bins[k+1]) for k in range(len(bins)-1)] #center of bins
+  return TR
+
+def get_guessparams(TR):
+  #Q=0.007
+  #gamma=1.7
+  PoNEG=0.33
+  PoNEU=0.33
+  PoPOS=0.33
+  mu2=TR.x[list(TR.n).index(max(TR.n))]
+  mu1=0.9*mu2
+  mu3=1.1*mu2  
+  guessparams=(PoNEG*2*TR.Fs*TR.Imax/TR.numbin, mu1, PoNEU*2*TR.Fs*TR.Imax/TR.numbin, mu2, PoPOS*2*TR.Fs*TR.Imax/TR.numbin, mu3)
+  return guessparams
+
+#show histogram
+def showHist(TR,pars=None): # leave these inputs (don't just put TR, because we also use it for guesses)
+  if pars!=None: params=pars
+  else: params=TR.params
+  xs=[]
+  for i in range(len(TR.x)):
+    if float(TR.n[i])/max(TR.n) > 0.01:
+      xs.append(TR.x[i])
+  Xdiff=max(xs)-min(xs)
+  Xav=0.5*(max(xs)+min(xs))
+  Xmin=Xav-0.75*Xdiff
+  Xmax=Xav+0.75*Xdiff
+  pb.clf()
+  pb.bar(TR.x,TR.n,float(TR.Imax)/TR.numbin,color='0.8',linewidth=0.4,align='center')
+  pb.plot(np.linspace(0,100,500),oneGauss(params[0:2],np.linspace(0,100,500)),color=col1,linewidth=1)
+  pb.plot(np.linspace(0,100,500),oneGauss(params[2:4],np.linspace(0,100,500)),color=col2,linewidth=1)
+  pb.plot(np.linspace(0,100,500),oneGauss(params[4:6],np.linspace(0,100,500)),color=col3,linewidth=1)
+  pb.plot(np.linspace(0,100,500),threeGauss(params,np.linspace(0,100,500)),'--k',linewidth=1)
+  pb.xlabel('I (pA)',fontsize=20)
+  pb.ylabel('Counts',fontsize=20)
+  pb.xticks(fontsize=16)
+  pb.yticks(fontsize=16)
+  pb.xlim([Xmin,Xmax])
+  pb.grid(True)
+  pb.show()
+  return
+
+
+
+
+
+
+
+
+
+
 def sigofmu(mu):
   sig=0.5+(1./20)*mu
   return sig
-
-# get data
-def getItrace(filename):
-  f=open(filename,'rU')
-  cond=True
-  for x in range(35):f.readline()   #skip header
-  line='asdfasdf'
-  data=f.readlines() 
-  Ifwd=[dt.split()[1] for dt in data]
-  Ibwd=[dt.split()[2] for dt in data]
-  Ibwd.reverse()
-  I=[]
-  I.extend(Ifwd)
-  I.extend(Ibwd)
-  I=[float(i)*1E12 for i in I]    #change units to pA
-  return I
 
 # clean data
 def cleanFT(I,highFreq=1.5):
@@ -86,12 +233,6 @@ def cleanFT(I,highFreq=1.5):
   Icut=scipy.fftpack.ifft(FTcut)
   return Ikeep
 
-#make histogram data
-def getHist(I):
-  n,bins=np.histogram(I,bins=np.linspace(0,Imax,numbin+1))
-  ret=(n,bins)
-  return ret
-
 #show trace
 def showTrace(I):
   t=[float(i)*1000/Fs for i in range(len(I))]
@@ -105,36 +246,20 @@ def showTrace(I):
   pb.show()
   return
 
-#show histogram
-def showHist(x,n,params):
-  pb.clf()
-  pb.bar(x,n,float(Imax)/numbin,color='0.8',linewidth=0.4,align='center')
-  pb.plot(np.linspace(0,100,500),oneGauss(params[0:2],np.linspace(0,100,500)),color=col1,linewidth=1)
-  pb.plot(np.linspace(0,100,500),oneGauss(params[2:4],np.linspace(0,100,500)),color=col2,linewidth=1)
-  pb.plot(np.linspace(0,100,500),oneGauss(params[4:6],np.linspace(0,100,500)),color=col3,linewidth=1)
-  pb.plot(np.linspace(0,100,500),threeGauss(params,np.linspace(0,100,500)),'--k',linewidth=1)
-  pb.xlabel('I (pA)',fontsize=18)
-  pb.ylabel('Counts',fontsize=18)
-  pb.xlim([0,60])
-  pb.grid(True)
-  pb.show()
-  return
-
 # get time-correlation hist
-def corrHist(I,Irange,tau):
+def corrHist(TR,Irange,tau):
   lower=Irange[0]
   upper=Irange[1]
   Icorr=[]
   k=tau
-  for i in I[tau:]:
-    if ((I[k-tau]>lower)and(I[k-tau]<upper)):
+  for i in TR.I[tau:]:
+    if ((TR.I[k-tau]>lower)and(TR.I[k-tau]<upper)):
       Icorr.append(i)
     k+=1
   if len(Icorr)==0:
     return # can't do nothing with nothing
-  n,bins=np.histogram(Icorr,bins=np.linspace(0,Imax,numbin+1))
-  ret=(n,bins)
-  return ret
+  n,bins=np.histogram(Icorr,bins=np.linspace(0,TR.Imax,TR.numbin+1))
+  return (n,bins)
 
 def saveCorrHist(I,Irange,tau):
   n,bins=getHist(I)
@@ -267,31 +392,6 @@ def threePLOTS_corrHist(dirname,I,Irange1,Irange2,Irange3,taumax):
     plt.text(33,0.9*max(n),'tau='+str('%d'%tau))
     pb.savefig(fname)
   return
-
-def get_scanparams(filename):
-  x=np.array([0.0000000020128,0.000000002108307,0.000000002205033,0.000000002304373,0.000000002404483,0.000000002506767,0.000000002609444,0.000000002714023,0.000000002819564,0.000000002925106,0.000000003032267,0.000000003139197,0.000000003247665,0.000000003356696,0.000000003465344,0.00000000357534,0.000000003684857,0.000000003795656,0.000000003905897,0.000000004017367,0.000000004129093,0.000000004240215,0.000000004352506,0.000000004464105])
-  x=[i*10**9 for i in x]
-  BIASstring=filename[-13]+'.'+filename[-10:-8]
-  BIAS=float(BIASstring)
-  NUMstring=filename[-7:-4]
-  NUM=int(NUMstring)
-  DIST=x[NUM-1]
-  return (BIAS,DIST)
-  
-def get_guessparams(BIAS,DIST):
-  Q=0.007
-  gamma=1.7
-  PoNEG=np.exp(-2*DIST*gamma)/(Q**2+Q*np.exp(-DIST*gamma)+np.exp(-2*DIST*gamma))
-  PoNEU=np.exp(-DIST*gamma)/(Q+np.exp(-DIST*gamma)+np.exp(-2*DIST*gamma)/Q)
-  PoPOS=1/(1+np.exp(-DIST*gamma)/Q+np.exp(-2*DIST*gamma)/Q**2)
-  mu1=6+(15./4.464105)*DIST+3.*np.sin(2*np.pi*DIST/0.72-1.2*np.pi)
-  mu2=21+(5./4.464105)*DIST+3.*np.sin(2*np.pi*DIST/0.72-1.2*np.pi)
-  mu3=40-(10./4.464105)*DIST+3.*np.sin(2*np.pi*DIST/0.72-1.2*np.pi)
-  print PoNEG
-  print PoNEU
-  print PoPOS
-  guessparams=(PoNEG*2*Fs*Imax/numbin, mu1, PoNEU*2*Fs*Imax/numbin, mu2, PoPOS*2*Fs*Imax/numbin, mu3)
-  return guessparams
 
 #-#-# single gaussian fit:
 #-#-#

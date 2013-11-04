@@ -20,7 +20,10 @@ numbin=300
 Imax=100
 Fs=1e4
 
-def adjustGuess(x,n,guessparams):
+def adjustGuess(TR):
+  x=TR.x
+  n=TR.n
+  guessparams=TR.params
   good=False
   while good==False:
     var=raw_input("Are you pleased with the guess ('y', 'show',  or 'parameter=value') ? ")
@@ -49,7 +52,7 @@ def adjustGuess(x,n,guessparams):
       guessparams[5]=float(var[4:])
       guessparams=tuple(guessparams)
     elif var=='show':
-      showHist(x,n,guessparams)
+      showHist(TR,guessparams)
     elif var=='y':
       good=True
     elif var!='':
@@ -75,45 +78,24 @@ def showIrange(x,n,params,I,Iranges):
   pb.show()
   return
 
-def getCorr(I,Irange,taumax,params):
-  q=(params[1],params[3],params[5])
-  n,bins=getHist(I)
-  x=[0.5*(bins[k]+bins[k+1]) for k in range(len(bins)-1)] #center of bins
-  params=threeGaussFit(x,n)
+def getCorr(TR,Irange,taumax):
+  q=(TR.params[1],TR.params[3],TR.params[5])
   T,P1,P2,P3=([],[],[],[])
-  for tau in range(taumax+1)[3:]:
-    print '\r'+str('%d%%'%(100.*tau/taumax)),
+  if TR.Fs>1e4:
+    TAU=range(3,int(taumax*TR.Fs)+1,int(TR.Fs/1e4))
+  else:
+    TAU=range(int(taumax*TR.Fs)+1)[3:]
+  for tau in TAU:
+    #print 'working...'
+    print '\r'+str('%d%%'%(100.*tau/taumax/TR.Fs)),
     sys.stdout.flush()
-    nCorr,binsCorr=corrHist(I,Irange,tau)
-    params2=threeGaussFit_fixed(x,nCorr,q)
-    T.append(tau)
+    nCorr,binsCorr=corrHist(TR,Irange,tau)
+    params2=threeGaussFit_fixed(TR.x,nCorr,q)
+    T.append(tau/TR.Fs)
     P1.append(params2[0]/sum(params2))
     P2.append(params2[1]/sum(params2))
     P3.append(params2[2]/sum(params2))
   return (T,P1,P2,P3)
-  
-# NOT USED FOR NOW (make a mode for this) 
-#def threePLOTS_corrHist(dirname,I,Irange1,Irange2,Irange3,taumax):
-#  if dirname[-1]!='/':
-#    dirname=dirname+'/'
-#  for tau in range(taumax+1):
-#    print 'working on tau='+str('%d'%tau)
-#    fname=dirname+str('%03d'%tau)+'.png'
-#    n,bins=getHist(I)
-#    pb.clf()
-#    pb.bar(bins[1:],n,float(Imax)/numbin,color='0.5',alpha=0.5,linewidth=0)
-#    nCorr1,binsCorr1=corrHist(I,Irange1,tau)
-#    nCorr2,binsCorr2=corrHist(I,Irange2,tau)
-#    nCorr3,binsCorr3=corrHist(I,Irange3,tau)
-#    pb.bar(binsCorr1[1:],nCorr1,float(Imax)/numbin,color=col1,linewidth=0.4,alpha=0.5)
-#    pb.bar(binsCorr2[1:],nCorr2,float(Imax)/numbin,color=col2,linewidth=0.4,alpha=0.5)
-#    pb.bar(binsCorr3[1:],nCorr3,float(Imax)/numbin,color=col3,linewidth=0.4,alpha=0.5)
-#    pb.grid(True)
-#    pb.xlabel('I (pA)',fontsize=16)
-#    pb.xlabel('counts',fontsize=16)
-#    plt.text(33,0.9*max(n),'tau='+str('%d'%tau))
-#    pb.savefig(fname)
-#  return
 
 def ranges(params):
   A1,mu1,A2,mu2,A3,mu3=params
@@ -147,18 +129,17 @@ def ranges(params):
 
 def dublexPLOT(NEG,NEU,POS,p,q,PoALL,taumax,directory=None):
 #NEG NEU POS p q taumax
-  T=NEG[0]
-  tau=[float(t)*1000/Fs for t in T] #convert to ms
-  TMAX=taumax*1000/Fs #convert to ms
+  tau=NEG[0]
+  
   pb.figure(1)
   pb.clf()
-  pNEG1,=pb.plot(tau,NEG[1],col1,linestyle='None',marker='.')
-  pNEG2,=pb.plot(tau,NEG[2],col2,linestyle='None',marker='.')
-  pNEG3,=pb.plot(tau,NEG[3],col3,linestyle='None',marker='.')
-  pb.plot(tau,dublex(p,T,q,PoALL)[0][1],col1,tau,dublex(p,T,q,PoALL)[0][2],col2,tau,dublex(p,T,q,PoALL)[0][3],col3)
+  pNEG1,=pb.plot(np.array(tau)*1000,NEG[1],col1,linestyle='None',marker='.')
+  pNEG2,=pb.plot(np.array(tau)*1000,NEG[2],col2,linestyle='None',marker='.')
+  pNEG3,=pb.plot(np.array(tau)*1000,NEG[3],col3,linestyle='None',marker='.')
+  pb.plot(np.array(tau)*1000,dublex(p,tau,q,PoALL)[0][1],col1,np.array(tau)*1000,dublex(p,tau,q,PoALL)[0][2],col2,np.array(tau)*1000,dublex(p,tau,q,PoALL)[0][3],col3)
   pb.legend([pNEG1, pNEG2, pNEG3], ["$P_{-}$", "$P_{o}$", "$P_{+}$"],fontsize=18)
   pb.grid(True)
-  pb.xlim([0,TMAX])
+  pb.xlim([0,taumax*1000])
   pb.ylim([0,1])
   pb.xticks(fontsize=16)
   pb.yticks(fontsize=16)
@@ -169,12 +150,12 @@ def dublexPLOT(NEG,NEU,POS,p,q,PoALL,taumax,directory=None):
   pb.figure(2)
   pb.clf()
   pb.grid(True)
-  pNEU1,=pb.plot(tau,NEU[1],col1,linestyle='None',marker='.')
-  pNEU2,=pb.plot(tau,NEU[2],col2,linestyle='None',marker='.')
-  pNEU3,=pb.plot(tau,NEU[3],col3,linestyle='None',marker='.')
-  pb.plot(tau,dublex(p,T,q,PoALL)[1][1],col1,tau,dublex(p,T,q,PoALL)[1][2],col2,tau,dublex(p,T,q,PoALL)[1][3],col3)
+  pNEU1,=pb.plot(np.array(tau)*1000,NEU[1],col1,linestyle='None',marker='.')
+  pNEU2,=pb.plot(np.array(tau)*1000,NEU[2],col2,linestyle='None',marker='.')
+  pNEU3,=pb.plot(np.array(tau)*1000,NEU[3],col3,linestyle='None',marker='.')
+  pb.plot(np.array(tau)*1000,dublex(p,tau,q,PoALL)[1][1],col1,np.array(tau)*1000,dublex(p,tau,q,PoALL)[1][2],col2,np.array(tau)*1000,dublex(p,tau,q,PoALL)[1][3],col3)
   pb.legend([pNEU1, pNEU2, pNEU3], ["$P_{-}$", "$P_{o}$", "$P_{+}$"],fontsize=18)
-  pb.xlim([0,TMAX])
+  pb.xlim([0,taumax*1000])
   pb.ylim([0,1])
   pb.xticks(fontsize=16)
   pb.yticks(fontsize=16)
@@ -184,13 +165,13 @@ def dublexPLOT(NEG,NEU,POS,p,q,PoALL,taumax,directory=None):
   
   pb.figure(3)
   pb.clf
-  pPOS1,=pb.plot(tau,POS[1],col1,linestyle='None',marker='.')
-  pPOS2,=pb.plot(tau,POS[2],col2,linestyle='None',marker='.')
-  pPOS3,=pb.plot(tau,POS[3],col3,linestyle='None',marker='.')
-  pb.plot(tau,dublex(p,T,q,PoALL)[2][1],col1,tau,dublex(p,T,q,PoALL)[2][2],col2,tau,dublex(p,T,q,PoALL)[2][3],col3)
+  pPOS1,=pb.plot(np.array(tau)*1000,POS[1],col1,linestyle='None',marker='.')
+  pPOS2,=pb.plot(np.array(tau)*1000,POS[2],col2,linestyle='None',marker='.')
+  pPOS3,=pb.plot(np.array(tau)*1000,POS[3],col3,linestyle='None',marker='.')
+  pb.plot(np.array(tau)*1000,dublex(p,tau,q,PoALL)[2][1],col1,np.array(tau)*1000,dublex(p,tau,q,PoALL)[2][2],col2,np.array(tau)*1000,dublex(p,tau,q,PoALL)[2][3],col3)
   pb.legend([pPOS1, pPOS2, pPOS3], ["$P_{-}$", "$P_{o}$", "$P_{+}$"],fontsize=18)
   pb.grid(True)
-  pb.xlim([0,TMAX])
+  pb.xlim([0,taumax*1000])
   pb.ylim([0,1])
   pb.xticks(fontsize=16)
   pb.yticks(fontsize=16)
@@ -233,7 +214,9 @@ def threeGaussErr(p, x, n):
   #  error=1000*error
   return error
 
-def threeGaussFit(x,n,guess=(3000, 20, 3000, 25, 3000, 30),mode=None):
+def threeGaussFit(TR,guess=(3000, 20, 3000, 25, 3000, 30),mode=None):
+  x=TR.x
+  n=TR.n
   params,success=leastsq(threeGaussErr,guess,args=(x,n))
   A1, mu1, A2, mu2, A3, mu3 = params
   sig1=sigofmu(mu1)
@@ -348,7 +331,7 @@ def dublexErr(p,T,dat,q,PoALL):
   return np.array(y)-dat
 
 def dublexFit(T,dat,q,PoALL):
-  p0=(1./5,1./5)#(a0,b0)
+  p0=(500.,500.)#(a0,b0)
   params,success=leastsq(dublexErr,p0,args=(T,dat,q,PoALL))
   return params
 
