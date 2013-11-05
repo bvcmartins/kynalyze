@@ -124,7 +124,7 @@ def get_scanparams(TR):
     TR.POStip=[START[0]+(END[0]-START[0])*NUMPT/NUMPTS,START[1]+(END[1]-START[1])*NUMPT/NUMPTS]
     TR.POSdb=END
     TR.bias=BIAS
-    TR.dist=sqrt(sum((np.array(TR.POStip)-np.array(TR.POSdb))**2))
+    TR.dist=np.sqrt(sum((np.array(TR.POStip)-np.array(TR.POSdb))**2))
   return TR
 
 # get data
