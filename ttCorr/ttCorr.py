@@ -57,16 +57,18 @@ class TRACE:
     self.numbin=numbin
     self.Imax=Imax
     self.I = np.nan
-    if Fs==None:
-      succ=False
-      while succ==False:
-        IN=raw_input("What is the sample rate? (e.g. 1e4) : ")
-        try:
-          #float(IN)
-          self.Fs=float(IN)
-          succ=True
-        except ValueError:
-          if IN!='':print "Whakina turkey jive is this?"
+    self.Fs=1e5    # added this part just to make life easier
+#    if Fs==None:
+#      succ=False
+#       
+#      while succ==False:
+#        IN=raw_input("What is the sample rate? (e.g. 1e4) : ")
+#        try:
+#          #float(IN)
+#          self.Fs=float(IN)
+#          succ=True
+#        except ValueError:
+#          if IN!='':print "Whakina turkey jive is this?"
         
     #experimental parameters
     self.bias = np.nan
@@ -77,6 +79,10 @@ class TRACE:
     self.bins = np.nan
     self.x = np.nan
     self.n = np.nan
+    #smoothing
+    self.y = np.nan
+    #peak finder
+    self.peak = []
     #Gaussian fit
     self.histtype = '3' # should only have certain allowed values: ['3','2neg','2pos','1neg','1pos']
     self.params = np.nan
@@ -100,7 +106,63 @@ class TRACE:
     self.d = np.nan
 
 ####
+#class gauss_analysis:
+#  def __init__(self,TR):
+#    self.TR=TR 
+#    if len(TR.peak)==1: self.__class__= gauss_1p
+#    elif len(TR.peak)==2: self.__class__= gauss_2p
+#    elif len(TR.peak)==3: self.__class__= gauss_3p
+#
+class gauss_1p: # gaussian parameters specific for 3 peaks
+  def __init__(self,TR):
+    self.TR=TR   
+  def guess(self,TR):
+    #Q=0.007
+    #gamma=1.7
+    PoNEG=0.33
+    PoNEU=0.33
+    PoPOS=0.33
+    guessparams=(PoNEG*2*TR.Fs*TR.Imax/TR.numbin, TR.peak[0], PoNEU*2*TR.Fs*TR.Imax/TR.numbin, TR.peak[1], PoPOS*2*TR.Fs*TR.Imax/TR.numbin, TR.peak[2])
+    return guessparams
+#
+class gauss_2p: # gaussian parameters specific for 3 peaks
+  def __init__(self,TR):
+    self.TR=TR
+  def guess(self,TR):
+    #Q=0.007
+    #gamma=1.7
+    PoNEG=0.33
+    PoNEU=0.33
+    PoPOS=0.33
+    guessparams=(PoNEG*2*TR.Fs*TR.Imax/TR.numbin, TR.peak[0], PoNEU*2*TR.Fs*TR.Imax/TR.numbin, TR.peak[1], PoPOS*2*TR.Fs*TR.Imax/TR.numbin, TR.peak[2])
+    return guessparams
 
+class gauss_3p: # gaussian parameters specific for 3 peaks
+  def __init__(self,TR):
+    self.TR=TR     
+  def guess(self,TR):
+    #Q=0.007
+    #gamma=1.7
+    PoNEG=0.33
+    PoNEU=0.33
+    PoPOS=0.33
+    guessparams=(PoNEG*2*TR.Fs*TR.Imax/TR.numbin, TR.peak[0], PoNEU*2*TR.Fs*TR.Imax/TR.numbin, TR.peak[1], PoPOS*2*TR.Fs*TR.Imax/TR.numbin, TR.peak[2])
+    return guessparams
+
+  def Fit(x,n,guess=(3000, 20, 3000, 25, 3000, 30),mode=None):
+  # This handles plots 7 through 14 well, but not outside of that
+  # --> need better initial guesses 
+    params,success=leastsq(threeGaussErr,guess,args=(x,n))
+    A1,mu1,A2,mu2,A3,mu3=params
+    sig1=sigofmu(mu1)
+    sig2=sigofmu(mu2)
+    sig3=sigofmu(mu3)
+    tot=(params[0]+params[2]+params[4])
+    #make sure means are in the right order:
+    return params
+
+
+####
 def get_scanparams(TR):
   if open(TR.filename,'rU').readline()[:3]=='Exp':
     x=np.array([0.0000000020128,0.000000002108307,0.000000002205033,0.000000002304373,0.000000002404483,0.000000002506767,0.000000002609444,0.000000002714023,0.000000002819564,0.000000002925106,0.000000003032267,0.000000003139197,0.000000003247665,0.000000003356696,0.000000003465344,0.00000000357534,0.000000003684857,0.000000003795656,0.000000003905897,0.000000004017367,0.000000004129093,0.000000004240215,0.000000004352506,0.000000004464105])
@@ -150,8 +212,8 @@ def getItrace(TR):
 #make histogram data
 def getHist(TR):
   n,bins=np.histogram(TR.I,bins=np.linspace(0,TR.Imax,TR.numbin+1))
-  TR.n=n
-  TR.bins=bins
+  TR.n=n                      #
+  TR.bins=bins                #
   TR.x=[0.5*(bins[k]+bins[k+1]) for k in range(len(bins)-1)] #center of bins
   return TR
 
@@ -193,15 +255,6 @@ def showHist(TR,pars=None): # leave these inputs (don't just put TR, because we 
   pb.grid(True)
   pb.show()
   return
-
-
-
-
-
-
-
-
-
 
 def sigofmu(mu):
   sig=0.5+(1./20)*mu
@@ -598,6 +651,42 @@ def analyze(filename):
   b=b*Fs # converts to units of Hz
   c,d=(a*alpha,b*beta)
   return (a,b,c,d)
+
+#####
+#
+# New subroutine: signal smoothing
+#
+#####
+
+def smooth(TR):
+  window_len=11
+  window='hanning'
+  s=np.r_[TR.n[window_len-1:0:-1],TR.n,TR.n[-1:-window_len:-1]]
+  w=eval('np.'+window+'(window_len)')
+  TR.y=np.convolve(w/w.sum(),s,mode='valid')
+#  pb.plot(np.linspace(0,1,len(TR.y)),TR.y,color=col1,linewidth=1)
+#  pb.plot(np.linspace(0,1,len(TR.n)),TR.n,color=col1,linewidth=1)
+#  pb.show() 
+  return 0 
+
+def peak_finder(TR):
+  pk=np.r_[1, TR.y[1:] > TR.y[:-1]] & np.r_[TR.y[:-1] > TR.y[1:],1]
+#  pb.plot(np.linspace(0,1,len(TR.y)),TR.y,color=col1,linewidth=1)
+  x=np.linspace(0,1,len(pk))
+#  pb.plot(np.linspace(0,1,len(pk)),1000*pk,color=col1,linewidth=1)
+#  pb.plot(x,1000*pk,color=col1,linewidth=1)
+#  pb.show()
+#  TR.npeak=0
+#  n=0
+#  for i in pk:
+#    if i==1:
+#      TR.peak.append(x[n])
+#      TR.npeak+=1   
+#      print np.where(pk)
+#    n+=1
+  TR.peak=np.where(pk==1)[0]
+
+  return 0 
 
 def main():
   MESSAGE="ttCorr.py is a library of functions that are to be called by Analyze.py and SetAnalyze.py"

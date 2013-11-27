@@ -2,17 +2,27 @@
 
 import sys
 import numpy as np
-
 import ttCorr as ttC
+from ttCorr import *
 
 numbin=300
 Imax=100
 Fs=1e4
 
 def histFit(TR):
-  guessparams=ttC.get_guessparams(TR)
+  smooth(TR)
+  peak_finder(TR)
+  if len(TR.peak)==3:
+    guessparams=gauss_3p(TR).guess(TR)
+  elif len(TR.peak)==2:
+    guessparams=gauss_2p(TR).guess(TR)
+  else:
+    guessparams=gauss_1p(TR).guess(TR)
+    
   TR.params=ttC.three.threeGaussFit(TR,mode='vocal',guess=guessparams)
   ttC.showHist(TR)
+
+#  raise sys.exit() # temporary stop
   
   ### Fitting the histogram with Gaussians: 
   success=False
@@ -157,6 +167,7 @@ def histFit(TR):
     print MESSAGE
     print '-'*len(MESSAGE)+'\n'
   return TR
+
 
 ######
 ######
