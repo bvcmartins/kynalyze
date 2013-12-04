@@ -2,17 +2,27 @@
 
 import sys
 import numpy as np
-
 import ttCorr as ttC
+from ttCorr import *
 
 numbin=300
 Imax=100
 Fs=1e4
 
 def histFit(TR):
-  guessparams=ttC.get_guessparams(TR)
+  smooth(TR)
+  peak_finder(TR)
+  if len(TR.peak)==3:
+    guessparams=gauss_3p(TR).guess(TR)
+  elif len(TR.peak)==2:
+    guessparams=gauss_2p(TR).guess(TR)
+  else:
+    guessparams=gauss_1p(TR).guess(TR)
+    
   TR.params=ttC.three.threeGaussFit(TR,mode='vocal',guess=guessparams)
   ttC.showHist(TR)
+
+#  raise sys.exit() # temporary stop
   
   ### Fitting the histogram with Gaussians: 
   success=False
@@ -158,6 +168,7 @@ def histFit(TR):
     print '-'*len(MESSAGE)+'\n'
   return TR
 
+
 ######
 ######
 ######
@@ -260,12 +271,16 @@ def Analyze(filename):
   
   return TR
 
+####################
+# Main Function. 
+####################
+
 def main():
-  if len(sys.argv)==1:
+  if len(sys.argv)==1: # no arguments passed by user. must stop
     print '\n/-----\\\n|ERROR|===>>> Try inputs of the form python Analyze.py foo.dat (mode)\n\-----/\n'
-    sys.exit(0)
+    sys.exit(0) # leave the program
   filename=sys.argv[1]
-  if len(sys.argv)==3:
+  if len(sys.argv)==3:  
     MODE=sys.argv[2] # modes are meant to produce a particular plot or particular data... ALL gets them all
   else:
     MODE=None
@@ -277,5 +292,5 @@ def main():
   Analyze(filename)
   return
 
-if __name__=='__main__':
-  main()
+if __name__=='__main__': # trick to allow using main as a function
+  main()                 # main function is called here
