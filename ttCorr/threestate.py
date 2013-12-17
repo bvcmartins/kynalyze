@@ -6,19 +6,13 @@ import scipy.fftpack
 import scipy.special
 from scipy.optimize import curve_fit
 from scipy.optimize import leastsq
-#import pickle
 import matplotlib.pyplot as plt
-
-from ttCorr import *
+import ttCorr as ttC
 
 col1='#FF7A00'
 col2='#03899C'
 col3='#D2006B'
 col4='#619A00'
-
-numbin=300
-Imax=100
-Fs=1e4
 
 def adjustGuess(TR):
   x=TR.x
@@ -52,56 +46,55 @@ def adjustGuess(TR):
       guessparams[5]=float(var[4:])
       guessparams=tuple(guessparams)
     elif var=='show':
-      showHist(TR,guessparams)
+      ttC.showHist(TR,guessparams)
     elif var=='y':
       good=True
     elif var!='':
       print "Use one of the accepted parameters (A1,mu1,A2,mu2,A3,mu3)"
-  return guessparams
-
-def showIrange(x,n,params,I,Iranges):
-  IrangeNEG,IrangeNEU,IrangePOS=Iranges
-  pb.clf()
-  pb.bar(x,n,float(Imax)/numbin,color='0.8',linewidth=0.4,align='center')
-  nCorrNEG,binsCorr=corrHist(I,IrangeNEG,0)
-  nCorrNEU,binsCorr=corrHist(I,IrangeNEU,0)
-  nCorrPOS,binsCorr=corrHist(I,IrangePOS,0)
-  pb.bar(x,nCorrNEG,float(Imax)/numbin,color=col1,linewidth=0.4,align='center')
-  pb.bar(x,nCorrNEU,float(Imax)/numbin,color=col2,linewidth=0.4,align='center')
-  pb.bar(x,nCorrPOS,float(Imax)/numbin,color=col3,linewidth=0.4,align='center')
-  pb.plot(np.linspace(0,40,500),oneGauss(params[0:2],np.linspace(0,40,500)),color=col1,linewidth=1)
-  pb.plot(np.linspace(0,40,500),oneGauss(params[2:4],np.linspace(0,40,500)),color=col2,linewidth=1)
-  pb.plot(np.linspace(0,40,500),oneGauss(params[4:6],np.linspace(0,40,500)),color=col3,linewidth=1)
-  pb.plot(np.linspace(0,40,500),threeGauss(params,np.linspace(0,40,500)),'--k',linewidth=1)
-  pb.xlim([0,40])
-  pb.grid(True)
-  pb.show()
-  return
+  TR.params=guessparams
+  return None
 
 def getCorr(TR,Irange,taumax):
-  q=(TR.params[1],TR.params[3],TR.params[5])
+  P=[]
   T,P1,P2,P3=([],[],[],[])
+  for I in TR.x:
+    p1=ttC.oneGauss((TR.params[0],TR.params[1]),I)
+    p2=ttC.oneGauss((TR.params[2],TR.params[3]),I)
+    p3=ttC.oneGauss((TR.params[4],TR.params[5]),I)
+    p=np.array([p1,p2,p3])
+    p=p/p.sum()
+    P.append(p)
   if TR.Fs>1e4:
-    TAU=range(3,int(taumax*TR.Fs)+1,int(TR.Fs/1e4))
+    TAU=range(0,int(taumax*TR.Fs)+1,int(TR.Fs/1e4))
   else:
-    TAU=range(int(taumax*TR.Fs)+1)[3:]
+    TAU=range(int(taumax*TR.Fs)+1)#[3:] # change 3 to 0 later
+  lower=Irange[0]
+  upper=Irange[1]
+  INDlower=min(range(len(TR.I))[:-int(taumax*TR.Fs)-1], key=lambda k: np.abs(TR.Itraj[k][0]-lower))
+  INDupper=min(range(len(TR.I))[:-int(taumax*TR.Fs)-1], key=lambda k: np.abs(TR.Itraj[k][0]-upper))
+  Itrbl=np.array(TR.Itraj[INDlower:INDupper]) # this is a "trajectory block"
   for tau in TAU:
-    #print 'working...'
     print '\r'+str('%d%%'%(100.*tau/taumax/TR.Fs)),
     sys.stdout.flush()
-    nCorr,binsCorr=corrHist(TR,Irange,tau)
-    params2=threeGaussFit_fixed(TR.x,nCorr,q)
-    T.append(tau/TR.Fs)
-    P1.append(params2[0]/sum(params2))
-    P2.append(params2[1]/sum(params2))
-    P3.append(params2[2]/sum(params2))
+    nCorr,binsCorr=np.histogram(Itrbl[:,tau],bins=np.linspace(0,TR.Imax,TR.numbin+1))
+    ptot=np.zeros(3)
+    ktot=0
+    for k in range(len(TR.x)):
+      ptot+=nCorr[k]*P[k]
+      ktot+=nCorr[k]
+    ptot=ptot/ktot
+    T.append(float(tau)/TR.Fs)
+    P1.append(ptot[0])
+    P2.append(ptot[1])
+    P3.append(ptot[2])
   return (T,P1,P2,P3)
+
 
 def ranges(params):
   A1,mu1,A2,mu2,A3,mu3=params
-  sig1=sigofmu(mu1)
-  sig2=sigofmu(mu2)
-  sig3=sigofmu(mu3)
+  sig1=ttC.sigofmu(mu1)
+  sig2=ttC.sigofmu(mu2)
+  sig3=ttC.sigofmu(mu3)
   IrangeNEG=(0,mu2-2*sig2)
   IrangeNEU=(mu2-sig2,mu2+sig2)
   IrangePOS=(mu2+2*sig2,mu3+8*sig3)
@@ -197,9 +190,9 @@ def get_scanparams(filename):
 #-#-#
 def threeGauss(p,x):
   A1, mu1, A2, mu2, A3, mu3 = p
-  sig1=sigofmu(mu1)
-  sig2=sigofmu(mu2)
-  sig3=sigofmu(mu3)
+  sig1=ttC.sigofmu(mu1)
+  sig2=ttC.sigofmu(mu2)
+  sig3=ttC.sigofmu(mu3)
   G1=(A1/(sig1*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu1)*(x-mu1)/(sig1*sig1))
   G2=(A2/(sig2*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu2)*(x-mu2)/(sig2*sig2))
   G3=(A3/(sig3*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu3)*(x-mu3)/(sig3*sig3))
@@ -219,9 +212,9 @@ def threeGaussFit(TR,guess=(3000, 20, 3000, 25, 3000, 30),mode=None):
   n=TR.n
   params,success=leastsq(threeGaussErr,guess,args=(x,n))
   A1, mu1, A2, mu2, A3, mu3 = params
-  sig1=sigofmu(mu1)
-  sig2=sigofmu(mu2)
-  sig3=sigofmu(mu3)
+  sig1=ttC.sigofmu(mu1)
+  sig2=ttC.sigofmu(mu2)
+  sig3=ttC.sigofmu(mu3)
   if mode=='vocal':
     print 'Parameters for triple Gaussian fit to whole histogram:'
     print 'A1: '+str('%d'%A1)
@@ -247,33 +240,6 @@ def threeGaussFit(TR,guess=(3000, 20, 3000, 25, 3000, 30),mode=None):
     params=(A1,mu1,A2,mu2,A3,mu3)
   if params[1]>params[3] or params[1]>params[5] or params[3]>params[5]:
     print 'the means are not in order: you need to alter the code to get this right'
-  return params
-
-#-#-# constrained 3-gauss fit:
-#-#-#
-def threeGauss_fixed(p, x, q):
-  A1,A2,A3=p
-  mu1,mu2,mu3=q
-  sig1=sigofmu(mu1)
-  sig2=sigofmu(mu2)
-  sig3=sigofmu(mu3)
-  G1=(A1/(sig1*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu1)*(x-mu1)/(sig1*sig1))
-  G2=(A2/(sig2*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu2)*(x-mu2)/(sig2*sig2))
-  G3=(A3/(sig3*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu3)*(x-mu3)/(sig3*sig3))
-  return G1+G2+G3
-
-def threeGaussErr_fixed(p, x, n, q):
-  error=threeGauss_fixed(p, x, q) - n
-  if p[0]<0 or p[1]<0 or p[2]<0: #if any amplitudes get negative
-    error=1000*error
-  #minsep=3
-  #if np.abs(p[2]-p[5])<minsep or np.abs(p[8]-p[5])<minsep or np.abs(p[8]-p[3])<minsep: #if peaks get too close together
-  #  error=1000*error
-  return error
-
-def threeGaussFit_fixed(x,n,q):
-  p0=(3000, 3000, 3000)
-  params,success=leastsq(threeGaussErr_fixed,p0,args=(x,n,q))
   return params
 
 #-#-# double exponential fit: (used when there are three states)
@@ -322,7 +288,6 @@ def dublex(p,T,q,PoALL):#p=(a,b) ; T is the array of tau values ; q is the addit
     Pneu.append(Pt[1]) #neu
     Ppos.append(Pt[2]) #pos
   POS=(T,Pneg,Pneu,Ppos)
-  
   return (NEG,NEU,POS)
 
 def dublexErr(p,T,dat,q,PoALL):
@@ -332,8 +297,17 @@ def dublexErr(p,T,dat,q,PoALL):
 
 def dublexFit(T,dat,q,PoALL):
   p0=(500.,500.)#(a0,b0)
-  params,success=leastsq(dublexErr,p0,args=(T,dat,q,PoALL))
+  #params,success=leastsq(dublexErr,p0,args=(T,dat,q,PoALL))
+  def CVdublex(T,a,b):
+    NEG,NEU,POS=dublex((a,b),T,q,PoALL)
+    return NEG[1]+NEG[2]+NEG[3]+NEU[1]+NEU[2]+NEU[3]+POS[1]+POS[2]+POS[3]
+  params,pcov=curve_fit(CVdublex,T,dat,p0=p0)
+  errors=tuple([np.sqrt(pcov[k][k]) for k in range(len(params))])
+  print "params are:"
+  print params
+  print "errors are:"
+  print errors
+  print "pcov is:"
+  print pcov
   return params
-
-
-
+  

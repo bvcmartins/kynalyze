@@ -8,34 +8,12 @@ from scipy.optimize import curve_fit
 from scipy.optimize import leastsq
 #import pickle
 import matplotlib.pyplot as plt
+import threestate as three
 
 col1='#FF7A00'
 col2='#03899C'
 col3='#D2006B'
 col4='#619A00'
-
-#DELETE THIS CLASS AS SOON AS YOU UPDATE THE PICKLES ... SO IMPORTANT TO KEEP YOUR PICKLES UP TO DATE!
-class TraceSet:
-  def __init__(self):
-        self.Pneg = np.nan
-        self.Pneu = np.nan
-        self.Ppos = np.nan
-        self.a = np.nan
-        self.b = np.nan
-        self.c = np.nan
-        self.d = np.nan
-        self.Aneg = np.nan
-        self.SIGneg = np.nan
-        self.MUneg = np.nan
-        self.Aneu = np.nan
-        self.SIGneu = np.nan
-        self.MUneu = np.nan
-        self.Apos = np.nan
-        self.SIGpos = np.nan
-        self.MUpos = np.nan
-        self.V = np.nan
-        self.D = np.nan
-        self.filname=''
 
 class TRACE:
   '''
@@ -43,8 +21,10 @@ class TRACE:
   by simply assigning it a filename. Through Analyze.py, we fill in the rest of the data.
   It is important that there not be any "big data" in here, so that we can pass the object
   around without difficulty.
+  
+  DO NOT REMOVE STRUCTURES FROM THIS CLASS, OR CHANGE THEM! ONLY ADD THEM 
   '''
-  def __init__(self,fname,numbin=300,Imax=100,Fs=None):
+  def __init__(self,fname,numbin=300,Imax=100,Fs=1e4):
     
     MESSAGE='Initiating trace object for: '+fname;
     print '-'*len(MESSAGE)
@@ -57,18 +37,19 @@ class TRACE:
     self.numbin=numbin
     self.Imax=Imax
     self.I = np.nan
-    self.Fs=1e5    # added this part just to make life easier
-#    if Fs==None:
-#      succ=False
-#       
-#      while succ==False:
-#        IN=raw_input("What is the sample rate? (e.g. 1e4) : ")
-#        try:
-#          #float(IN)
-#          self.Fs=float(IN)
-#          succ=True
-#        except ValueError:
-#          if IN!='':print "Whakina turkey jive is this?"
+    self.Itraj = np.nan
+    if Fs==None:
+      succ=False
+      while succ==False:
+        IN=raw_input("What is the sample rate? (e.g. 1e4) : ")
+        try:
+          #float(IN)
+          self.Fs=float(IN)
+          succ=True
+        except ValueError:
+          if IN!='':print "Whakina turkey jive is this?"
+    else:
+      self.Fs=Fs
         
     #experimental parameters
     self.bias = np.nan
@@ -79,10 +60,6 @@ class TRACE:
     self.bins = np.nan
     self.x = np.nan
     self.n = np.nan
-    #smoothing
-    self.y = np.nan
-    #peak finder
-    self.peak = []
     #Gaussian fit
     self.histtype = '3' # should only have certain allowed values: ['3','2neg','2pos','1neg','1pos']
     self.params = np.nan
@@ -106,63 +83,13 @@ class TRACE:
     self.d = np.nan
 
 ####
-#class gauss_analysis:
-#  def __init__(self,TR):
-#    self.TR=TR 
-#    if len(TR.peak)==1: self.__class__= gauss_1p
-#    elif len(TR.peak)==2: self.__class__= gauss_2p
-#    elif len(TR.peak)==3: self.__class__= gauss_3p
-#
-class gauss_1p: # gaussian parameters specific for 3 peaks
-  def __init__(self,TR):
-    self.TR=TR   
-  def guess(self,TR):
-    #Q=0.007
-    #gamma=1.7
-    PoNEG=0.33
-    PoNEU=0.33
-    PoPOS=0.33
-    guessparams=(PoNEG*2*TR.Fs*TR.Imax/TR.numbin, TR.peak[0], PoNEU*2*TR.Fs*TR.Imax/TR.numbin, TR.peak[1], PoPOS*2*TR.Fs*TR.Imax/TR.numbin, TR.peak[2])
-    return guessparams
-#
-class gauss_2p: # gaussian parameters specific for 3 peaks
-  def __init__(self,TR):
-    self.TR=TR
-  def guess(self,TR):
-    #Q=0.007
-    #gamma=1.7
-    PoNEG=0.33
-    PoNEU=0.33
-    PoPOS=0.33
-    guessparams=(PoNEG*2*TR.Fs*TR.Imax/TR.numbin, TR.peak[0], PoNEU*2*TR.Fs*TR.Imax/TR.numbin, TR.peak[1], PoPOS*2*TR.Fs*TR.Imax/TR.numbin, TR.peak[2])
-    return guessparams
 
-class gauss_3p: # gaussian parameters specific for 3 peaks
-  def __init__(self,TR):
-    self.TR=TR     
-  def guess(self,TR):
-    #Q=0.007
-    #gamma=1.7
-    PoNEG=0.33
-    PoNEU=0.33
-    PoPOS=0.33
-    guessparams=(PoNEG*2*TR.Fs*TR.Imax/TR.numbin, TR.peak[0], PoNEU*2*TR.Fs*TR.Imax/TR.numbin, TR.peak[1], PoPOS*2*TR.Fs*TR.Imax/TR.numbin, TR.peak[2])
-    return guessparams
+# THIS IS A KLUDGE!
+def sigofmu(mu):
+  sig=0.5+(1./20)*mu
+  return sig
+# THAT WAS A KLUDGE!
 
-  def Fit(x,n,guess=(3000, 20, 3000, 25, 3000, 30),mode=None):
-  # This handles plots 7 through 14 well, but not outside of that
-  # --> need better initial guesses 
-    params,success=leastsq(threeGaussErr,guess,args=(x,n))
-    A1,mu1,A2,mu2,A3,mu3=params
-    sig1=sigofmu(mu1)
-    sig2=sigofmu(mu2)
-    sig3=sigofmu(mu3)
-    tot=(params[0]+params[2]+params[4])
-    #make sure means are in the right order:
-    return params
-
-
-####
 def get_scanparams(TR):
   if open(TR.filename,'rU').readline()[:3]=='Exp':
     x=np.array([0.0000000020128,0.000000002108307,0.000000002205033,0.000000002304373,0.000000002404483,0.000000002506767,0.000000002609444,0.000000002714023,0.000000002819564,0.000000002925106,0.000000003032267,0.000000003139197,0.000000003247665,0.000000003356696,0.000000003465344,0.00000000357534,0.000000003684857,0.000000003795656,0.000000003905897,0.000000004017367,0.000000004129093,0.000000004240215,0.000000004352506,0.000000004464105])
@@ -212,9 +139,62 @@ def getItrace(TR):
 #make histogram data
 def getHist(TR):
   n,bins=np.histogram(TR.I,bins=np.linspace(0,TR.Imax,TR.numbin+1))
-  TR.n=n                      #
-  TR.bins=bins                #
+  TR.n=n
+  TR.bins=bins
   TR.x=[0.5*(bins[k]+bins[k+1]) for k in range(len(bins)-1)] #center of bins
+  return TR
+
+def histFit(TR):
+  guessparams=get_guessparams(TR)
+  TR.params=three.threeGaussFit(TR,mode='vocal',guess=guessparams)
+  showHist(TR)
+  
+  ### Fitting the histogram with Gaussians: 
+  success=False
+  while success==False:
+    var=raw_input("OK or adjust guess ('y', or '3' to change initial guess) [add two state capability later] ?")
+    if var=='y':
+      success=True
+      tot=TR.params[0]+TR.params[2]+TR.params[4]
+      totalCounts=tot*TR.numbin/TR.Imax
+      TR.Pneg=TR.params[0]/tot #negative steady state
+      TR.Pneu=TR.params[2]/tot #neutral steady state
+      TR.Ppos=TR.params[4]/tot #positive steady state
+      TR.Aneg,TR.MUneg,TR.Aneu,TR.MUneu,TR.Apos,TR.MUpos=TR.params   
+      TR.SIGneg,TR.SIGneu,TR.SIGpos=(sigofmu(TR.params[1]),sigofmu(TR.params[3]),sigofmu(TR.params[5]))
+    elif var=='3':
+      three.adjustGuess(TR)
+      TR.params=three.threeGaussFit(TR,mode='vocal',guess=guessparams)
+      showHist(TR)
+      succ=False
+      while succ==False:
+        var=raw_input("Happy yet ('y' or 'n') ?")
+        if var=='y':
+          succ=True
+          success=True
+          TR.Aneg,TR.MUneg,TR.Aneu,TR.MUneu,TR.Apos,TR.MUpos=TR.params
+          TR.SIGneg,TR.SIGneu,TR.SIGpos=(sigofmu(TR.params[1]),sigofmu(TR.params[3]),sigofmu(TR.params[5]))
+          tot=TR.params[0]+TR.params[2]+TR.params[4]
+          totalCounts=tot*TR.numbin/TR.Imax
+          TR.Pneg=TR.params[0]/tot #negative steady state
+          TR.Pneu=TR.params[2]/tot #neutral steady state
+          TR.Ppos=TR.params[4]/tot #positive steady state
+        elif var=='n':
+          succ=True
+          success=False
+        elif var!='':
+          print "Ain't nobody got time for that!"
+    elif var!='':
+      print "give me something I can work with!"
+  print 'Steady state probabilities (from multiple Gaussian fit):'
+  print 'Pneg: '+str('%.4f'%TR.Pneg)
+  print 'Pneu: '+str('%.4f'%TR.Pneu)
+  print 'Ppos: '+str('%.4f'%TR.Ppos)+'\n'
+  if np.abs(totalCounts-sum(TR.n))>(float(sum(TR.n))/100):
+    MESSAGE='---> WARNING: totalCounts is ' +str(totalCounts)
+    print '-'*len(MESSAGE)
+    print MESSAGE
+    print '-'*len(MESSAGE)+'\n'
   return TR
 
 def get_guessparams(TR):
@@ -246,7 +226,7 @@ def showHist(TR,pars=None): # leave these inputs (don't just put TR, because we 
   pb.plot(np.linspace(0,100,500),oneGauss(params[0:2],np.linspace(0,100,500)),color=col1,linewidth=1)
   pb.plot(np.linspace(0,100,500),oneGauss(params[2:4],np.linspace(0,100,500)),color=col2,linewidth=1)
   pb.plot(np.linspace(0,100,500),oneGauss(params[4:6],np.linspace(0,100,500)),color=col3,linewidth=1)
-  pb.plot(np.linspace(0,100,500),threeGauss(params,np.linspace(0,100,500)),'--k',linewidth=1)
+  pb.plot(np.linspace(0,100,500),three.threeGauss(params,np.linspace(0,100,500)),'--k',linewidth=1)
   pb.xlabel('I (pA)',fontsize=20)
   pb.ylabel('Counts',fontsize=20)
   pb.xticks(fontsize=16)
@@ -255,10 +235,6 @@ def showHist(TR,pars=None): # leave these inputs (don't just put TR, because we 
   pb.grid(True)
   pb.show()
   return
-
-def sigofmu(mu):
-  sig=0.5+(1./20)*mu
-  return sig
 
 # clean data
 def cleanFT(I,highFreq=1.5):
@@ -299,151 +275,14 @@ def showTrace(I):
   pb.show()
   return
 
-# get time-correlation hist
-def corrHist(TR,Irange,tau):
-  lower=Irange[0]
-  upper=Irange[1]
-  Icorr=[]
-  k=tau
-  for i in TR.I[tau:]:
-    if ((TR.I[k-tau]>lower)and(TR.I[k-tau]<upper)):
-      Icorr.append(i)
-    k+=1
-  if len(Icorr)==0:
-    return # can't do nothing with nothing
-  n,bins=np.histogram(Icorr,bins=np.linspace(0,TR.Imax,TR.numbin+1))
-  return (n,bins)
-
-def saveCorrHist(I,Irange,tau):
-  n,bins=getHist(I)
-  x=[0.5*(bins[k]+bins[k+1]) for k in range(len(bins)-1)] #center of bins
-  pb.clf()
-  pb.bar(x,n,float(Imax)/numbin,color='0.8',linewidth=0.4,align='center')
-  pb.plot(np.linspace(0,40,500),oneGauss(params[0:2],np.linspace(0,40,500)),color=col1,linewidth=1)
-  pb.plot(np.linspace(0,40,500),oneGauss(params[2:4],np.linspace(0,40,500)),color=col2,linewidth=1)
-  pb.plot(np.linspace(0,40,500),oneGauss(params[4:6],np.linspace(0,40,500)),color=col3,linewidth=1)
-  pb.plot(np.linspace(0,40,500),threeGauss(params,np.linspace(0,40,500)),'--k',linewidth=1)
-  pb.xlim([0,40])
-  pb.grid(True)
-  pb.show()
-  return
-  
-#show correlation trace
-def showTraceCorr(I,Irange,tau):
-  t=[float(i)*1000/Fs for i in range(len(I))]
-  lower=Irange[0]
-  upper=Irange[1]
-  Icorr=[]
-  tcorr=[]
-  k=tau
-  for i in I[tau:]:
-    if ((I[k-tau]>lower)and(I[k-tau]<upper)):
-      Icorr.append(i)
-      tcorr.append(t[k])
-    k+=1
-  if len(Icorr)==0:
-    return # can't do nothing with nothing
-  pb.clf()
-  pb.plot(t,I,'k',marker='.',linewidth=0.4)
-  pb.plot(tcorr,Icorr,col1,marker='.',linewidth=0)
-  pb.grid(True)
-  pb.xlim([200,400])
-  pb.ylim([0,40])
-  pb.xlabel('t (ms)')
-  pb.ylabel('I (pA)')
-  pb.text(360,37,'tau=%.1f'%(tau*1000/Fs))
-  pb.show()
-  return
-
-#show correlation trace
-def showTraceCorrs(I,Irange,taumax):
-  t=[float(i)*1000/Fs for i in range(len(I))]
-  lower=Irange[0]
-  upper=Irange[1]
-  for tau in range(taumax):    
-    Icorr=[]
-    tcorr=[]
-    k=tau
-    for i in I[tau:]:
-      if ((I[k-tau]>lower)and(I[k-tau]<upper)):
-        Icorr.append(i)
-        tcorr.append(t[k])
-      k+=1
-    if len(Icorr)==0:
-      return # can't do nothing with nothing
-    pb.clf()
-    pb.plot(t,I,'k',marker='.',linewidth=0.4)
-    pb.plot(tcorr,Icorr,col1,marker='.',linewidth=0)
-    pb.grid(True)
-    pb.xlim([200,400])
-    pb.ylim([0,40])
-    pb.xlabel('t (ms)')
-    pb.ylabel('I (pA)')
-    pb.text(360,37,'tau=%.1f'%(tau*1000/Fs))
-    pb.savefig('./traceCorr/'+str(tau)+'.png')
-
-def showCorrHists(I,Irange,taumax,params):
-  q=(params[1],params[3],params[5])
-  n,bins=getHist(I)
-  x=[0.5*(bins[k]+bins[k+1]) for k in range(len(bins)-1)] #center of bins
-  params=threeGaussFit(x,n)
-  T,P1,P2,P3=([],[],[],[])
-  for tau in range(taumax+1)[1:]:
-    print '\r'+str('%d%%'%(100.*tau/taumax)),
-    sys.stdout.flush()
-    nCorr,binsCorr=corrHist(I,Irange,tau)
-    params2=threeGaussFit_fixed(x,nCorr,q)
-    pb.clf()
-    pb.bar(x,n,float(Imax)/numbin,color='0.8',linewidth=0.4,align='center')
-    pb.bar(x,nCorr,float(Imax)/numbin,color=col1,linewidth=0.4,align='center')
-    pb.plot(np.linspace(0,40,500),oneGauss((params2[0]+params[1]),np.linspace(0,40,500)),color=col1,linewidth=1)
-    pb.plot(np.linspace(0,40,500),oneGauss((params2[1]+params[3]),np.linspace(0,40,500)),color=col2,linewidth=1)
-    pb.plot(np.linspace(0,40,500),oneGauss((params2[2]+params[5]),np.linspace(0,40,500)),color=col3,linewidth=1)
-    #pb.plot(np.linspace(0,40,500),threeGauss(params,np.linspace(0,40,500)),'--k',linewidth=1)  
-    pb.savefig('./corrHists/'+str('%3d'%tau)+'.png')
-  return
-
-# NOT USED FOR NOW (make a mode for this)
-def PLOTS_corrHist(dirname,I,Irange,taumax):
-  #print Irange
-  if dirname[-1]!='/':
-    dirname=dirname+'/'
-  for tau in range(taumax+1):
-    print 'working on tau='+str('%d'%tau)
-    fname=dirname+str('%d'%Irange[0])+'pA'+'to'+str('%d'%Irange[1])+'pA'+str('-%03d'%tau)+'.png'
-    n,bins=getHist(I)
-    pb.clf()
-    pb.bar(bins[1:],n,float(Imax)/numbin,color='0.5',alpha=0.5,linewidth=0)
-    nCorr,binsCorr=corrHist(I,Irange,tau)
-    pb.bar(binsCorr[1:],nCorr,float(Imax)/numbin,color=col3,linewidth=0.4)
-    pb.grid(True)
-    pb.xlabel('I (pA)',fontsize=16)
-    pb.xlabel('counts',fontsize=16)
-    plt.text(33,0.9*max(n),'tau='+str('%d'%tau))
-    pb.savefig(fname)
-  return
-
-# NOT USED FOR NOW (make a mode for this) 
-def threePLOTS_corrHist(dirname,I,Irange1,Irange2,Irange3,taumax):
-  if dirname[-1]!='/':
-    dirname=dirname+'/'
-  for tau in range(taumax+1):
-    print 'working on tau='+str('%d'%tau)
-    fname=dirname+str('%03d'%tau)+'.png'
-    n,bins=getHist(I)
-    pb.clf()
-    pb.bar(bins[1:],n,float(Imax)/numbin,color='0.5',alpha=0.5,linewidth=0)
-    nCorr1,binsCorr1=corrHist(I,Irange1,tau)
-    nCorr2,binsCorr2=corrHist(I,Irange2,tau)
-    nCorr3,binsCorr3=corrHist(I,Irange3,tau)
-    pb.bar(binsCorr1[1:],nCorr1,float(Imax)/numbin,color=col1,linewidth=0.4,alpha=0.5)
-    pb.bar(binsCorr2[1:],nCorr2,float(Imax)/numbin,color=col2,linewidth=0.4,alpha=0.5)
-    pb.bar(binsCorr3[1:],nCorr3,float(Imax)/numbin,color=col3,linewidth=0.4,alpha=0.5)
-    pb.grid(True)
-    pb.xlabel('I (pA)',fontsize=16)
-    pb.xlabel('counts',fontsize=16)
-    plt.text(33,0.9*max(n),'tau='+str('%d'%tau))
-    pb.savefig(fname)
+def getItraj(TR,taumax):
+  taumax=int(taumax*TR.Fs+1)
+  print taumax
+  Itraj=[]
+  for k in range(len(TR.I)-taumax):
+    Itraj.append(TR.I[k:k+taumax])
+  Itraj.sort(key=lambda traj: traj[0])
+  TR.Itraj=Itraj
   return
 
 #-#-# single gaussian fit:
@@ -454,242 +293,50 @@ def oneGauss(p,x):
   G=(A/(sig*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu)*(x-mu)/(sig*sig))
   return G
 
-#-#-# double gaussian fit:
-#-#-#
-
-def twoGauss(p,x):
-  A1, mu1, A2, mu2 = p
-  sig1=sigofmu(mu1)
-  sig2=sigofmu(mu2)
-  G1=(A1/(sig1*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu1)*(x-mu1)/(sig1*sig1))
-  G2=(A2/(sig2*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu2)*(x-mu2)/(sig2*sig2))
-  return G1+G2
-
-def twoGaussErr(p, x, n): 
-  error=twoGauss(p, x) - n
-  if min(p[0],p[2])<0:
-    error=1000*error
-  #minsep=1.5
-  #if np.abs(p[2]-p[5])<minsep or np.abs(p[8]-p[5])<minsep or np.abs(p[8]-p[3])<minsep:
-  #  error=1000*error
-  return error
-
-def twoGaussFit(x,n,guess=(3000, 20, 3000, 25),mode=None):
-  params,success=leastsq(twoGaussErr,guess,args=(x,n))
-  A1,mu1,A2,mu2=params
-  sig1=sigofmu(mu1)
-  sig2=sigofmu(mu2)
-  if mode=='vocal':
-    print 'Parameters for triple Gaussian fit to whole histogram:'
-    print 'A1: '+str('%d'%A1)
-    print 'sig1: '+str('%.2f'%sig1)
-    print 'mu1: '+str('%.2f'%mu1)+'\n'
-    print 'A2: '+str('%d'%A2)
-    print 'sig2: '+str('%.2f'%sig2)
-    print 'mu2: '+str('%.2f'%mu2)+'\n'
-  
-  tot=(params[0]+params[2])
-  #make sure means are in the right order:
-  if params[1]>params[3]:
-    A1,sig1,mu1,A2,sig2,mu2=(A2,sig2,mu2,A1,sig1,mu1)
-    params=(A1,mu1,A2,mu2)
-  return params
-
-#-#-# triple gaussian fit:
-#-#-#
-def threeGauss(p,x):
-  A1, mu1, A2, mu2, A3, mu3 = p
-  sig1=sigofmu(mu1)
-  sig2=sigofmu(mu2)
-  sig3=sigofmu(mu3)
-  G1=(A1/(sig1*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu1)*(x-mu1)/(sig1*sig1))
-  G2=(A2/(sig2*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu2)*(x-mu2)/(sig2*sig2))
-  G3=(A3/(sig3*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu3)*(x-mu3)/(sig3*sig3))
-  return G1+G2+G3
-
-def threeGaussErr(p, x, n): 
-  error=threeGauss(p, x) - n
-  if min(p[0],p[2],p[4])<0:
-    error=1000*error
-  #minsep=1.5
-  #if np.abs(p[2]-p[5])<minsep or np.abs(p[8]-p[5])<minsep or np.abs(p[8]-p[3])<minsep:
-  #  error=1000*error
-  return error
-
-def threeGaussFit(x,n,guess=(3000, 20, 3000, 25, 3000, 30),mode=None):
-  # This handles plots 7 through 14 well, but not outside of that
-  # --> need better initial guesses 
-  params,success=leastsq(threeGaussErr,guess,args=(x,n))
-  A1,mu1,A2,mu2,A3,mu3=params
-  sig1=sigofmu(mu1)
-  sig2=sigofmu(mu2)
-  sig3=sigofmu(mu3)
-  if mode=='vocal':
-    print 'Parameters for triple Gaussian fit to whole histogram:'
-    print 'A1: '+str('%d'%A1)
-    print 'sig1: '+str('%.2f'%sig1)
-    print 'mu1: '+str('%.2f'%mu1)+'\n'
-    print 'A2: '+str('%d'%A2)
-    print 'sig2: '+str('%.2f'%sig2)
-    print 'mu2: '+str('%.2f'%mu2)+'\n'
-    print 'A3: '+str('%d'%A3)
-    print 'sig3: '+str('%.2f'%sig3)
-    print 'mu3: '+str('%.2f'%mu3)+'\n'
-  
-  tot=(params[0]+params[2]+params[4])
-  #make sure means are in the right order:
-  if params[1]>params[3]:
-    A1,sig1,mu1,A2,sig2,mu2=(A2,sig2,mu2,A1,sig1,mu1)
-    params=(A1,mu1,A2,mu2,A3,mu3)
-  if params[1]>params[5]:
-    A1,sig1,mu1,A2,sig2,mu2,A3,sig3,mu3=(A3,sig3,mu3,A1,sig1,mu1,A2,sig2,mu2)
-    params=(A1,mu1,A2,mu2,A3,mu3)
-  elif params[3]>params[5]:
-    A2,sig2,mu2,A3,sig3,mu3=(A3,sig3,mu3,A2,sig2,mu2)
-    params=(A1,mu1,A2,mu2,A3,mu3)
-  if params[1]>params[3] or params[1]>params[5] or params[3]>params[5]:
-    print 'the means are not in order: you need to alter the code to get this right'
-  return params
-
-#-#-# constrained 2-gauss fit:
-#-#-#
-def twoGauss_fixed(p, x, q):
-  A1,A2=p
-  mu1,mu2=q
-  sig1=sigofmu(mu1)
-  sig2=sigofmu(mu2)
-  G1=(A1/(sig1*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu1)*(x-mu1)/(sig1*sig1))
-  G2=(A2/(sig2*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu2)*(x-mu2)/(sig2*sig2))
-  return G1+G2
-
-def twoGaussErr_fixed(p, x, n, q): 
-  error=twoGauss_fixed(p, x, q) - n
-  if p[0]<0 or p[1]<0: #if any amplitudes get negative
-    error=1000*error
-  #minsep=3
-  #if np.abs(p[2]-p[5])<minsep or np.abs(p[8]-p[5])<minsep or np.abs(p[8]-p[3])<minsep: #if peaks get too close together
-  #  error=1000*error
-  return error
-
-def twoGaussFit_fixed(x,n,q):
-  p0=(3000, 3000)
-  params,success=leastsq(twoGaussErr_fixed,p0,args=(x,n,q))
-  return params
-  
-#-#-# constrained 3-gauss fit:
-#-#-#
-def threeGauss_fixed(p, x, q):
-  A1,A2,A3=p
-  mu1,mu2,mu3=q
-  sig1=sigofmu(mu1)
-  sig2=sigofmu(mu2)
-  sig3=sigofmu(mu3)
-  G1=(A1/(sig1*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu1)*(x-mu1)/(sig1*sig1))
-  G2=(A2/(sig2*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu2)*(x-mu2)/(sig2*sig2))
-  G3=(A3/(sig3*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu3)*(x-mu3)/(sig3*sig3))
-  return G1+G2+G3
-
-def threeGaussErr_fixed(p, x, n, q): 
-  error=threeGauss_fixed(p, x, q) - n
-  if p[0]<0 or p[1]<0 or p[2]<0: #if any amplitudes get negative
-    error=1000*error
-  #minsep=3
-  #if np.abs(p[2]-p[5])<minsep or np.abs(p[8]-p[5])<minsep or np.abs(p[8]-p[3])<minsep: #if peaks get too close together
-  #  error=1000*error
-  return error
-
-def threeGaussFit_fixed(x,n,q):
-  p0=(3000, 3000, 3000)
-  params,success=leastsq(threeGaussErr_fixed,p0,args=(x,n,q))
-  return params
-
 #-#-#-#-#-#-# 
 #-#-#-#-#-#-# 
-def analyze(filename):
-  # read file into a list, I
-  I=getItrace(filename) # can add: I=cleanFT(I,highFreq=2)
-    
-  # get and fit histogram of data
-  n,bins=getHist(I)
-  x=[0.5*(bins[k]+bins[k+1]) for k in range(len(bins)-1)] #center of bins
-  params=threeGaussFit(x,n)
-  tot=params[0]+params[3]+params[6]
-  totalCounts=tot*numbin/Imax
-  Pneg=params[0]/tot #negative steady state
-  Pneu=params[3]/tot #neutral steady state
-  Ppos=params[6]/tot #positive steady state
+
+def Analyze(filename):
+  TR=TRACE(filename) # initialize the trace object
+  TR=get_scanparams(TR) # get bias and pos and dist
+  TR=getItrace(TR) # add the data to TR.I
+  TR=getHist(TR) # get histogram
+  TR=histFit(TR) # fit the histogram
   
-  print 'Steady state probabilities (from triple Gaussian fit):'
-  print 'Pneg: '+str('%.4f'%Pneg)
-  print 'Pneu: '+str('%.4f'%Pneu)
-  print 'Ppos: '+str('%.4f'%Ppos)+'\n'
-  
-  alpha=Pneg/Pneu
-  beta=Pneu/Ppos
-  
-  if np.abs(totalCounts-len(I))>(float(len(I))/100):
-    MESSAGE='---> WARNING: totalCounts is ' +str(totalCounts)
-    print '-'*len(MESSAGE)
-    print MESSAGE
-    print '-'*len(MESSAGE)+'\n'
-  
+  taumax=10e-3 # 10 ms
   # get time correlations over three ranges
-  taumax=200
-  IrangeNEG,IrangeNEU,IrangePOS,PoALL=ranges(params)
-  print 'Working on negative range:'
-  NEG=getCorr(I,IrangeNEG,taumax,params) # NEG=(T,P1,P2,P3)
+  getItraj(TR,taumax)
+  IrangeNEG,IrangeNEU,IrangePOS,PoALL=three.ranges(TR.params)
+  print 'Negative range:'
+  print IrangeNEG
+  print 'Neutral range:'
+  print IrangeNEU
+  print 'Positive range:'
+  print IrangePOS
+  alpha=TR.Pneg/TR.Pneu
+  beta=TR.Pneu/TR.Ppos
+  q=(alpha,beta)
+  print '\nWorking on negative range:'
+  NEG=three.getCorr(TR,IrangeNEG,taumax) # NEG=(T,P1,P2,P3)
   print '\nWorking on neutral range:'
-  NEU=getCorr(I,IrangeNEU,taumax,params) # NEU=(T,P1,P2,P3)
+  NEU=three.getCorr(TR,IrangeNEU,taumax) # NEU=(T,P1,P2,P3)
   print '\nWorking on positive range:'
-  POS=getCorr(I,IrangePOS,taumax,params) # POS=(T,P1,P2,P3)
+  POS=three.getCorr(TR,IrangePOS,taumax) # POS=(T,P1,P2,P3)
   print '\n'
   
-  q=(alpha,beta)
-  p=dublexFit(np.array(NEG[0]),np.array(NEG[1]+NEG[2]+NEG[3]+NEU[1]+NEU[2]+NEU[3]+POS[1]+POS[2]+POS[3]),q,PoALL)
+  p=three.dublexFit(np.array(NEG[0]),np.array(NEG[1]+NEG[2]+NEG[3]+NEU[1]+NEU[2]+NEU[3]+POS[1]+POS[2]+POS[3]),q,PoALL)
   a,b=p
-  a=a*Fs # converts to units of Hz
-  b=b*Fs # converts to units of Hz
-  c,d=(a*alpha,b*beta)
-  return (a,b,c,d)
-
-#####
-#
-# New subroutine: signal smoothing
-#
-#####
-
-def smooth(TR):
-  window_len=11
-  window='hanning'
-  s=np.r_[TR.n[window_len-1:0:-1],TR.n,TR.n[-1:-window_len:-1]]
-  w=eval('np.'+window+'(window_len)')
-  TR.y=np.convolve(w/w.sum(),s,mode='valid')
-#  pb.plot(np.linspace(0,1,len(TR.y)),TR.y,color=col1,linewidth=1)
-#  pb.plot(np.linspace(0,1,len(TR.n)),TR.n,color=col1,linewidth=1)
-#  pb.show() 
-  return 0 
-
-def peak_finder(TR):
-  pk=np.r_[1, TR.y[1:] > TR.y[:-1]] & np.r_[TR.y[:-1] > TR.y[1:],1]
-#  pb.plot(np.linspace(0,1,len(TR.y)),TR.y,color=col1,linewidth=1)
-  x=np.linspace(0,1,len(pk))
-#  pb.plot(np.linspace(0,1,len(pk)),1000*pk,color=col1,linewidth=1)
-#  pb.plot(x,1000*pk,color=col1,linewidth=1)
-#  pb.show()
-#  TR.npeak=0
-#  n=0
-#  for i in pk:
-#    if i==1:
-#      TR.peak.append(x[n])
-#      TR.npeak+=1   
-#      print np.where(pk)
-#    n+=1
-  TR.peak=np.where(pk==1)[0]
-
-  return 0 
+  TR.a=a#*TR.Fs # converts to units of Hz --- no longer necessary
+  TR.b=b#*TR.Fs # converts to units of Hz --- no longer necessary
+  TR.c,TR.d=(a*alpha,b*beta)
+  print 'a,b,c,d are:'
+  print str('%.4f, '%TR.a)+str('%.4f, '%TR.b)+str('%.4f, '%TR.c)+str('%.4f, '%TR.d)
+  #three.dublexPLOT(NEG,NEU,POS,p,q,PoALL,taumax)
+  three.dublexPLOT(NEG,NEU,POS,(500,500),q,PoALL,taumax)
+  return TR
 
 def main():
-  MESSAGE="ttCorr.py is a library of functions that are to be called by Analyze.py and SetAnalyze.py"
+  MESSAGE="rr.py is a library of functions that are to be called by Analyze.py and SetAnalyze.py"
   print '\n'+'-'*min(80,len(MESSAGE))
   print '*'*min(80,len(MESSAGE))
   print '-'*min(80,len(MESSAGE))+'\n'
@@ -702,10 +349,3 @@ def main():
 
 if __name__ == '__main__':
   main()
-
-# TO DO:
-# - return error if failed to fit well
-# - provide good guesses
-# - try double and single gauss fits when triple fails... maybe even start with these
-
-
