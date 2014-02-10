@@ -9,6 +9,7 @@ from scipy.optimize import leastsq
 #import pickle
 import matplotlib.pyplot as plt
 import threestate as three
+import tlib1 as t1
 
 col1='#FF7A00'
 col2='#03899C'
@@ -81,6 +82,13 @@ class TRACE:
     self.b = np.nan
     self.c = np.nan
     self.d = np.nan
+###### inserted by Bruno on 2013-12-20
+    #smooth
+    self.y = np.nan
+    # peak finder
+    self.peak = []
+    self.amp = []
+######
 
 ####
 
@@ -148,7 +156,9 @@ def histFit(TR):
   guessparams=get_guessparams(TR)
   TR.params=three.threeGaussFit(TR,mode='vocal',guess=guessparams)
   showHist(TR)
-  
+ 
+  return 0 # temporary return - inserted by Bruno on 2013-12-20
+ 
   ### Fitting the histogram with Gaussians: 
   success=False
   while success==False:
@@ -296,12 +306,30 @@ def oneGauss(p,x):
 #-#-#-#-#-#-# 
 #-#-#-#-#-#-# 
 
+def Analyze2(filename):  # analyse function - Bruno on 2014-01-21
+  a2=[]
+  TR=TRACE(filename) # initialize the trace object
+  TR=get_scanparams(TR) # get bias and pos and dist
+  TR=getItrace(TR) # add the data to TR.I
+  TR=getHist(TR) # get histogram
+####### Inserted by Bruno on 2013-12-20
+  t1.smooth(TR)  
+  t1.peak_finder(TR)   
+  a2=t1.threeGaussFit(TR)
+  return a2 
+######
+
+
+
 def Analyze(filename):
   TR=TRACE(filename) # initialize the trace object
   TR=get_scanparams(TR) # get bias and pos and dist
   TR=getItrace(TR) # add the data to TR.I
   TR=getHist(TR) # get histogram
-  TR=histFit(TR) # fit the histogram
+  TR=histFit(TR) 
+  t1.smooth(TR)  
+  t1.peak_finder(TR)   
+  t1.threeGaussFit(TR)
   
   taumax=10e-3 # 10 ms
   # get time correlations over three ranges
