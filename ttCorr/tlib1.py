@@ -9,6 +9,7 @@ from scipy.optimize import leastsq
 import matplotlib.pyplot as plt
 import ttCorr as ttC
 from operator import itemgetter
+import re
 
 col1='#FF7A00'
 col2='#03899C'
@@ -89,7 +90,7 @@ def threeGauss2(x,A1,mu1,sig1,A2,mu2,sig2,A3,mu3,sig3):
   G3=(A3/(sig3*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu3)*(x-mu3)/(sig3*sig3))
   return G1+G2+G3
 
-def threeGaussFit(TR):
+def threeGaussFit(TR,filename):
 #  guess=get_guessparams(TR)
   x=TR.x
   n=TR.n
@@ -106,4 +107,7 @@ def threeGaussFit(TR):
 #  print popt
   pb.plot(x,threeGauss2(x,popt[0],popt[1],popt[2],popt[3],popt[4],popt[5],popt[6],popt[7],popt[8]),color=col3,linewidth=1)
 #  pb.show()
+  i=re.search('[0-9]+',filename)
+  pb.savefig('figures/'+i.group()+'.png')
+  pb.clf()
   return mu1,mu2,mu3

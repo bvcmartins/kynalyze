@@ -315,7 +315,7 @@ def Analyze2(filename):  # analyse function - Bruno on 2014-01-21
 ####### Inserted by Bruno on 2013-12-20
   t1.smooth(TR)  
   t1.peak_finder(TR)   
-  a2=t1.threeGaussFit(TR)
+  a2=t1.threeGaussFit(TR,filename)
   return a2 
 ######
 
