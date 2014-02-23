@@ -88,6 +88,8 @@ class TRACE:
     # peak finder
     self.peak = []
     self.amp = []
+    self.popt = []
+    self.sens = 10  # arbitrary parameter
 ######
 
   def get_scanparams(self):
@@ -319,7 +321,6 @@ def oneGauss(p,x):
 #-#-#-#-#-#-# 
 
 def Analyze2(filename):  # analyse function - Bruno on 2014-01-21
-  a2=[]
   TR=TRACE(filename) # initialize the trace object
   TR.get_scanparams() # get bias and pos and dist
   TR.getItrace() # add the data to TR.I
@@ -327,8 +328,9 @@ def Analyze2(filename):  # analyse function - Bruno on 2014-01-21
 ####### Inserted by Bruno on 2013-12-20
   t1.smooth(TR)  
   t1.peak_finder(TR)   
-  a2=t1.threeGaussFit(TR,filename)
-  return a2 
+  t1.threeGaussFit(TR)
+  return t1.hidden_peak(TR,filename)
+
 ######
 
 def Analyze(filename,SHOW=False,SAVE=True):
