@@ -10,6 +10,7 @@ from scipy.optimize import leastsq
 import matplotlib.pyplot as plt
 import threestate as three
 import tlib1 as t1
+import re
 
 col1='#FF7A00'
 col2='#03899C'
@@ -32,8 +33,21 @@ class TRACE:
     print MESSAGE
     print '-'*len(MESSAGE)+'\n'
     
-    #basic info
     self.filename=fname
+    
+    ## directories
+    motherdir=os.path.dirname(os.path.realpath(fname))
+    kyndir=motherdir+'/kynalysis/'
+    datdir=kyndir+'/kyndat/'
+    figdir=kyndir+'/kynfig/'
+    if not os.path.exists(kyndir): os.makedirs(kyndir)
+    if not os.path.exists(datdir): os.makedirs(datdir)
+    if not os.path.exists(figdir): os.makedirs(figdir)    
+    self.kyndir=kyndir
+    self.datdir=datdir
+    self.figdir=figdir
+    
+    #basic info
     self.dataset=''
     self.numbin=numbin
     self.Imax=Imax
@@ -144,11 +158,10 @@ class TRACE:
     self.bins=bins
     self.x=[0.5*(bins[k]+bins[k+1]) for k in range(len(bins)-1)] #center of bins
     if SAVE:
-      folder=self.filename[:self.filename.index('.',1)]+'/'
-      if not os.path.exists(folder): os.makedirs(folder)
-      fname=folder+'hist'
-      self.plotHist(SHOW=SHOW,savename=fname+'.eps')
-      f=open(fname+'.dat','w')
+      fn=os.path.basename(self.filename)
+      self.plotHist(SHOW=SHOW,savename=self.figdir+'hist_'+fn[:-4]+'.eps')
+      f=open(self.datdir+fn[:-4]+'.dat','w')
+      f.write('#hist\n')
       f.write('BinCentre(pA)\tBinMin(pA)\tBinMax(pA)\tCounts\n')
       for i in range(len(self.n)):
         f.write(str(self.x[i])+'\t'+str(self.bins[i])+'\t'+str(self.bins[i+1])+'\t'+str(self.n[i])+'\n')
@@ -320,11 +333,11 @@ def oneGauss(p,x):
 #-#-#-#-#-#-# 
 #-#-#-#-#-#-# 
 
-def Analyze2(filename):  # analyse function - Bruno on 2014-01-21
+def Analyze2(filename):  # analyze function - Bruno on 2014-01-21
   TR=TRACE(filename) # initialize the trace object
   TR.get_scanparams() # get bias and pos and dist
   TR.getItrace() # add the data to TR.I
-  TR.getHist(SAVE=False) # get histogram
+  TR.getHist(SAVE=True) # get histogram
 ####### Inserted by Bruno on 2013-12-20
   t1.smooth(TR)  
   t1.peak_finder(TR)   
@@ -334,6 +347,7 @@ def Analyze2(filename):  # analyse function - Bruno on 2014-01-21
 ######
 
 def Analyze(filename,SHOW=False,SAVE=True):
+  ## start analysis
   TR=TRACE(filename) # initialize the trace object
   TR.get_scanparams() # get bias and pos and dist
   TR.getItrace() # add the data to TR.I
