@@ -28,7 +28,6 @@ def smooth(TR):
 
 def peak_finder(TR):
   pk=np.r_[1, TR.y[1:] > TR.y[:-1]] & np.r_[TR.y[:-1] > TR.y[1:],1]
-
   for i in np.where(pk==1)[0]:
     TR.peak.append(TR.x[int(i)])
     TR.amp.append(TR.y[int(i)])
@@ -102,6 +101,13 @@ def threeGauss2(x,mu1=0.0,A1=0.0,sig1=0.0,mu2=0.0,A2=0.0,sig2=0.0,mu3=0.0,A3=0.0
   G2=(A2/(sig2*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu2)*(x-mu2)/(sig2*sig2))
   G3=(A3/(sig3*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu3)*(x-mu3)/(sig3*sig3))
   return G1+G2+G3
+
+def nGauss2(x,params):
+  G=[]
+  for i in range(len(params)/3):
+    mu,A,sig=params[3*i:3*i+3]
+    G.append((A/(sig*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu)*(x-mu)/(sig*sig)))
+  return sum(G)
 
 def threeGaussFit(TR):
   print len(TR.peak)
@@ -182,14 +188,7 @@ def hidden_peak(TR,filename):
         TR.popt.append(popt[i])
 #
 ###
-
-  if len(TR.popt)==3:
-     pb.plot(x,oneGauss2(x,TR.popt[0],TR.popt[1],TR.popt[2]),color=col3,linewidth=1)
-  elif len(TR.popt)==6:
-     pb.plot(x,twoGauss2(x,TR.popt[0],TR.popt[1],TR.popt[2],TR.popt[3],TR.popt[4],TR.popt[5]),color=col3,linewidth=1)
-  else:
-     pb.plot(x,threeGauss2(x,TR.popt[0],TR.popt[1],TR.popt[2],TR.popt[3],TR.popt[4],TR.popt[5],TR.popt[6],TR.popt[7],TR.popt[8]),color=col3,linewidth=1)
-
+  pb.plot(x,nGauss2(x,TR.popt),color=col3,linewidth=1)
 ###
   i=re.search('[0-9]+',filename)
   pb.savefig('figures/'+i.group()+'.png')

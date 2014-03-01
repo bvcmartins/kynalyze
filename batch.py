@@ -39,7 +39,7 @@ def main():         # read the files and process the Gaussians
       j=re.sub('_ANSWER','',i)      # get the actual data files
       j=sys.argv[1]+j          # concatenate path and file name
 #      print j
-      a=ttC.Analyze2(j)
+      a=ttC.Analyze(j)
 #      out.write(str(a[0])+' '+str(a[1])+' '+str(a[2])+' '+str(data[3])+' '+str(data[4])+' '+str(data[5])+'\n')
 #def main():
 #  filename=sys.argv[1]

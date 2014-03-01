@@ -1,5 +1,6 @@
 import sys
 import os
+import copy
 import numpy as np
 import pylab as pb
 import scipy.fftpack
@@ -16,6 +17,7 @@ col1='#FF7A00'
 col2='#03899C'
 col3='#D2006B'
 col4='#619A00'
+colours=[col1,col2,col3,col4,'r','g','b',]
 
 class TRACE:
   '''
@@ -76,7 +78,7 @@ class TRACE:
     self.x = np.nan
     self.n = np.nan
     #Gaussian fit
-    self.histtype = '3' # should only have certain allowed values: ['3','2neg','2pos','1neg','1pos']
+    self.Nstates = None # should only have certain allowed values: ['3','2neg','2pos','1neg','1pos']
     self.params = np.nan
     ###the following should be derived from the above, not independently assigned
     self.Pneg = np.nan
@@ -152,29 +154,21 @@ class TRACE:
     return None
 
   #make histogram data
-  def getHist(self,SHOW=False,SAVE=True):
+  def getHist(self):
     n,bins=np.histogram(self.I,bins=np.linspace(0,self.Imax,self.numbin+1))
     self.n=n
+    self._n=copy.deepcopy(n) # this is a backup so that we can reset n later. It means we can smooth or alter n as much as we want and still return to the raw histogram.
     self.bins=bins
     self.x=[0.5*(bins[k]+bins[k+1]) for k in range(len(bins)-1)] #center of bins
-    if SAVE:
-      fn=os.path.basename(self.filename)
-      self.plotHist(SHOW=SHOW,savename=self.figdir+'hist_'+fn[:-4]+'.eps')
-      f=open(self.datdir+fn[:-4]+'.dat','w')
-      f.write('#hist\n')
-      f.write('BinCentre(pA)\tBinMin(pA)\tBinMax(pA)\tCounts\n')
-      for i in range(len(self.n)):
-        f.write(str(self.x[i])+'\t'+str(self.bins[i])+'\t'+str(self.bins[i+1])+'\t'+str(self.n[i])+'\n')
-      f.close
-    else: self.plotHist(SHOW=SHOW)
     return None
   
   #show histogram
-  def plotHist(self,pars=None,SHOW=True,savename=None): # leave these inputs (don't just put TR, because we also use it for guesses)
+  def plotHist(self,pars=None,SHOW=True,SAVE=True): # leave these inputs (don't just put TR, because we also use it for guesses)
     skipfits=False
     if pars!=None: params=pars
-    elif not np.isnan(self.params): params=self.params
-    else: skipfits=True
+    else:
+      if not np.isnan(np.sum(self.params)): params=self.params
+      else: skipfits=True
     xs=[]
     for i in range(len(self.x)):
       if float(self.n[i])/max(self.n) > 0.01:
@@ -186,20 +180,33 @@ class TRACE:
     pb.clf()
     pb.bar(self.x,self.n,float(self.Imax)/self.numbin,color='0.8',linewidth=0.4,align='center')
     if not skipfits:
-      pb.plot(np.linspace(0,100,500),oneGauss(params[0:2],np.linspace(0,100,500)),color=col1,linewidth=1)
-      pb.plot(np.linspace(0,100,500),oneGauss(params[2:4],np.linspace(0,100,500)),color=col2,linewidth=1)
-      pb.plot(np.linspace(0,100,500),oneGauss(params[4:6],np.linspace(0,100,500)),color=col3,linewidth=1)
-      pb.plot(np.linspace(0,100,500),three.threeGauss(params,np.linspace(0,100,500)),'--k',linewidth=1)
+      for i in range(len(params)/3):
+        pb.plot(np.linspace(0,100,500),nGauss(np.linspace(0,100,500),params[i*3:i*3+3]),color=colours[i],linewidth=1)
+      pb.plot(np.linspace(0,100,500),nGauss(np.linspace(0,100,500),params),'--k',linewidth=1)
     pb.xlabel('I (pA)',fontsize=20)
     pb.ylabel('Counts',fontsize=20)
     pb.xticks(fontsize=16)
     pb.yticks(fontsize=16)
     pb.xlim([Xmin,Xmax])
     pb.grid(True)
-    if savename!=None:pb.savefig(savename)
+    if SAVE:
+      fn=os.path.basename(self.filename)
+      pb.savefig(self.figdir+'hist_'+fn[:-4]+'.eps')
+      f=open(self.datdir+fn[:-4]+'.dat','w')
+      f.write('#hist\n')
+      f.write('BinCentre(pA)\tBinMin(pA)\tBinMax(pA)\tCounts\n')
+      for i in range(len(self.n)):
+        f.write(str(self.x[i])+'\t'+str(self.bins[i])+'\t'+str(self.bins[i+1])+'\t'+str(self.n[i])+'\n')
+      f.close
+    else: self.plotHist(SHOW=SHOW)
+    #if savename!=None:pb.savefig(savename)
     if SHOW:pb.show()
     return
     
+  def resetHist(self):
+    self.n=copy.deepcopy(self._n)
+    return
+
 ####
 
 def sigofmu(mu):
@@ -209,8 +216,7 @@ def sigofmu(mu):
 def histFit(TR):
   guessparams=get_guessparams(TR)
   TR.params=three.threeGaussFit(TR,mode='vocal',guess=guessparams)
-  showHist(TR)
- 
+  #TR.plotHist()
   return # temporary return - inserted by Bruno on 2013-12-20
  
   ### Fitting the histogram with Gaussians: 
@@ -229,7 +235,7 @@ def histFit(TR):
     elif var=='3':
       three.adjustGuess(TR)
       TR.params=three.threeGaussFit(TR,mode='vocal',guess=guessparams)
-      showHist(TR)
+      TR.plotHist()
       succ=False
       while succ==False:
         var=raw_input("Happy yet ('y' or 'n') ?")
@@ -329,6 +335,13 @@ def oneGauss(p,x):
   sig=sigofmu(mu)
   G=(A/(sig*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu)*(x-mu)/(sig*sig))
   return G
+  
+def nGauss(x,params):
+  G=[]
+  for i in range(len(params)/3):
+    mu,A,sig=params[3*i:3*i+3]
+    G.append((A/(sig*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu)*(x-mu)/(sig*sig)))
+  return sum(G)
 
 #-#-#-#-#-#-# 
 #-#-#-#-#-#-# 
@@ -337,10 +350,10 @@ def Analyze2(filename):  # analyze function - Bruno on 2014-01-21
   TR=TRACE(filename) # initialize the trace object
   TR.get_scanparams() # get bias and pos and dist
   TR.getItrace() # add the data to TR.I
-  TR.getHist(SAVE=True) # get histogram
+  TR.getHist() # get histogram
 ####### Inserted by Bruno on 2013-12-20
   t1.smooth(TR)  
-  t1.peak_finder(TR)   
+  t1.peak_finder(TR)
   t1.threeGaussFit(TR)
   return t1.hidden_peak(TR,filename)
 
@@ -351,9 +364,15 @@ def Analyze(filename,SHOW=False,SAVE=True):
   TR=TRACE(filename) # initialize the trace object
   TR.get_scanparams() # get bias and pos and dist
   TR.getItrace() # add the data to TR.I
-  TR.getHist(SHOW=SHOW,SAVE=SAVE) # get histogram
-  sys.exit(0)
+  TR.getHist() # get histogram
   histFit(TR)
+  t1.smooth(TR)
+  t1.peak_finder(TR)
+  t1.threeGaussFit(TR)
+  TR.params=t1.hidden_peak(TR,filename)
+  TR.resetHist()
+  TR.plotHist(SHOW=SHOW,SAVE=SAVE)
+  return
   #t1.smooth(TR)
   #t1.peak_finder(TR)
   #t1.threeGaussFit(TR)

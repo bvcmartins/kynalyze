@@ -19,7 +19,7 @@ def main():
   else:
     print "\nWatch it son!\nYou are only allowed modes in:\n['histogram','Irange','trace',traceCorr,corrHists,None]\n"
     sys.exit(0)
-  ttC.Analyze2(filename)
+  ttC.Analyze(filename)
   return
 
 if __name__=='__main__':
