@@ -27,7 +27,7 @@ class TRACE:
   It is important that there not be any "big data" in here, so that we can pass the object
   around without difficulty.
   '''
-  def __init__(self,fname,numbin=300,Imax=None,Fs=1e4):
+  def __init__(self,fname,numbin=300,Imax=None,Fs=1e4,taumax=10e-3):
     
     MESSAGE='Initiating trace object for: '+fname;
     print '-'*len(MESSAGE)
@@ -93,6 +93,8 @@ class TRACE:
     self.SIGpos = np.nan
     self.MUpos = np.nan
     #rates
+    self.ranges=None
+    self.taumax=taumax
     self.a = np.nan
     self.b = np.nan
     self.c = np.nan
@@ -170,12 +172,35 @@ class TRACE:
     smooth(self)
     peak_finder(self)
     threeGaussFit(self)
-    self.params=hidden_peak(self,self.filename)
+    self.params=hidden_peak(self)
     self.resetHist()
     return
   
+  #cut out bad peaks (replace this with something more sophisticated later)
+  def peakfilter(self):
+    i=0
+    ## cut out bad or insignificant peaks
+    while i < len(self.params)/3:
+      if self.params[i*3+1]<0: self.params[i*3:i*3+3]=[]
+      elif self.params[i*3+2]<0: self.params[i*3:i*3+3]=[]
+      elif self.params[i*3+1]/(len(self.I)*self.Imax/self.numbin)<0.01: self.params[i*3:i*3+3]=[]
+      else: i+=1
+    ## order peaks
+    temp=[]
+    for i in range(len(self.params)/3): temp.append(self.params[3*i:3*i+3])
+    temp.sort(key=lambda el:el[0])
+    self.params=[]
+    for i in range(len(temp)): self.params+=temp[i]
+    return
+  
+  def getRanges(self):
+    self.ranges=[]
+    for i in range(len(self.params)/3):
+      self.ranges.append((self.params[3*i]-self.params[3*i+2],self.params[3*i]+self.params[3*i+2])) ## (Imin,Imax)
+    return
+  
   #show histogram
-  def plotHist(self,pars=None,SHOW=True,SAVE=True): # leave these inputs (don't just put TR, because we also use it for guesses)
+  def plotHist(self,pars=None,SHOW=True,SAVE=True): 
     skipfits=False
     if pars!=None: params=pars
     else:
@@ -195,6 +220,11 @@ class TRACE:
       for i in range(len(params)/3):
         pb.plot(np.linspace(0,100,500),nGauss(np.linspace(0,100,500),params[i*3:i*3+3]),color=colours[i],linewidth=1)
       pb.plot(np.linspace(0,100,500),nGauss(np.linspace(0,100,500),params),'--k',linewidth=1)
+    if self.ranges!=None:
+      for i in range(len(self.ranges)):
+        rn=self.ranges[i]
+        mask=(self.x>rn[0])&(self.x<rn[1])
+        pb.bar(np.array(self.x)[mask],np.array(self.n)[mask],float(self.Imax)/self.numbin,color=colours[i],linewidth=0.4,align='center')
     pb.xlabel('I (pA)',fontsize=20)
     pb.ylabel('Counts',fontsize=20)
     pb.xticks(fontsize=16)
@@ -215,10 +245,25 @@ class TRACE:
     if SHOW:pb.show()
     return
     
+  def getCorr(self):
+    Tmax=int(self.taumax*self.Fs) ## integer corresponding to the index
+    
+    for rn in self.ranges:
+      for T in range(Tmax+1):
+        indeces=np.arange(len(self.I[:(-T)]))[(self.I[:(-T)]>rn[0])&(self.I[:(-T)]<rn[1])]+T
+        Icorr=np.array(self.I)[indeces]
+        nCorr,binsCorr=np.histogram(Icorr,bins=self.bins)
+        xCorr=[0.5*(binsCorr[k]+binsCorr[k+1]) for k in range(len(binsCorr)-1)]
+        #if T==2:pb.bar(xCorr,nCorr,float(self.Imax)/self.numbin,color=col1,linewidth=0.4,align='center');pb.show()
+        #
+        ## here we need to fit the "correlation histogram"
+        #
+    return
+    
   def resetHist(self):
     self.n=copy.deepcopy(self._n)
     return
-
+  
 ####
 
 def sigofmu(mu):
@@ -345,7 +390,7 @@ def threeGaussFit(TR):
         TR.popt.append(popt[i])
       TR.n=TR.n-threeGauss2(TR.x,popt[0],popt[1],popt[2],popt[3],popt[4],popt[5],popt[6],popt[7],popt[8])
 
-def hidden_peak(TR,filename):
+def hidden_peak(TR):
   window_len=11
   window='hanning'
   s=np.r_[TR.n[window_len-1:0:-1],TR.n,TR.n[-1:-window_len:-1]]
@@ -387,21 +432,24 @@ def hidden_peak(TR,filename):
  
       for i in range(9):
         TR.popt.append(popt[i])
-  i=re.search('[0-9]+',filename)
+  #i=re.search('[0-9]+',TR.filename)
   return TR.popt
 
 #-#-#-#-#-#-# 
 #-#-#-#-#-#-# 
 
-def Analyze(filename,SHOW=False,SAVE=True,taumax=10e-3):
+def Analyze(filename,SHOW=False,SAVE=True):
   ## start analysis
-  TR=TRACE(filename,numbin=1000,Imax=700) # initialize the trace object, get parameters, and read in the trace
-  TR.getHist() # get histogram
-  TR.fitHist() # fit histogram
-  TR.plotHist(SHOW=SHOW,SAVE=SAVE) # this is a slow step right now... but that may not be a big deal.
+  TR=TRACE(filename,numbin=300,Imax=100) # initialize the trace object, get parameters, and read in the trace
+  TR.getHist() ## get histogram - set TR.bins, TR.x, TR.n
+  TR.fitHist() ## fit histogram - set TR.params
+  TR.peakfilter()
+  TR.getRanges() ## set TR.ranges
+  TR.plotHist(SHOW=SHOW,SAVE=SAVE) ## this is a slow step right now... but that may not be a big deal.
+  TR.getCorr()
   return
   
-  # get time correlations over three ranges
+  ## get time correlations over three ranges
   getItraj(TR,taumax)
   IrangeNEG,IrangeNEU,IrangePOS,PoALL=three.ranges(TR.params)
   print 'Negative range:'
