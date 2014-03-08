@@ -10,7 +10,6 @@ from scipy.optimize import leastsq
 #import pickle
 import matplotlib.pyplot as plt
 import threestate as three
-import tlib1 as t1
 from operator import itemgetter
 import re
 import scipy.special
@@ -28,7 +27,7 @@ class TRACE:
   It is important that there not be any "big data" in here, so that we can pass the object
   around without difficulty.
   '''
-  def __init__(self,fname,numbin=300,Imax=100,Fs=1e4):
+  def __init__(self,fname,numbin=300,Imax=None,Fs=1e4):
     
     MESSAGE='Initiating trace object for: '+fname;
     print '-'*len(MESSAGE)
@@ -107,6 +106,10 @@ class TRACE:
     self.popt = []
     self.sens = 10  # arbitrary parameter
 ######
+    ## based on subsequent methods
+    self.get_scanparams()
+    self.getItrace()
+    if self.Imax==None: self.Imax=max(self.I)
 
   def get_scanparams(self):
     if open(self.filename,'rU').readline()[:3]=='Exp':
@@ -160,7 +163,16 @@ class TRACE:
     self._n=copy.deepcopy(n) # this is a backup so that we can reset n later. It means we can smooth or alter n as much as we want and still return to the raw histogram.
     self.bins=bins
     self.x=[0.5*(bins[k]+bins[k+1]) for k in range(len(bins)-1)] #center of bins
-    return None
+    return
+  
+  #fit histogram
+  def fitHist(self):
+    smooth(self)
+    peak_finder(self)
+    threeGaussFit(self)
+    self.params=hidden_peak(self,self.filename)
+    self.resetHist()
+    return
   
   #show histogram
   def plotHist(self,pars=None,SHOW=True,SAVE=True): # leave these inputs (don't just put TR, because we also use it for guesses)
@@ -213,60 +225,6 @@ def sigofmu(mu):
   sig=0.5+(1./20)*mu
   return sig
 
-def histFit(TR):
-  guessparams=get_guessparams(TR)
-  TR.params=three.threeGaussFit(TR,mode='vocal',guess=guessparams)
-  #TR.plotHist()
-  return # temporary return - inserted by Bruno on 2013-12-20
- 
-  ### Fitting the histogram with Gaussians: 
-  success=False
-  while success==False:
-    var=raw_input("OK or adjust guess ('y', or '3' to change initial guess) [add two state capability later] ?")
-    if var=='y':
-      success=True
-      tot=TR.params[0]+TR.params[2]+TR.params[4]
-      totalCounts=tot*TR.numbin/TR.Imax
-      TR.Pneg=TR.params[0]/tot #negative steady state
-      TR.Pneu=TR.params[2]/tot #neutral steady state
-      TR.Ppos=TR.params[4]/tot #positive steady state
-      TR.Aneg,TR.MUneg,TR.Aneu,TR.MUneu,TR.Apos,TR.MUpos=TR.params   
-      TR.SIGneg,TR.SIGneu,TR.SIGpos=(sigofmu(TR.params[1]),sigofmu(TR.params[3]),sigofmu(TR.params[5]))
-    elif var=='3':
-      three.adjustGuess(TR)
-      TR.params=three.threeGaussFit(TR,mode='vocal',guess=guessparams)
-      TR.plotHist()
-      succ=False
-      while succ==False:
-        var=raw_input("Happy yet ('y' or 'n') ?")
-        if var=='y':
-          succ=True
-          success=True
-          TR.Aneg,TR.MUneg,TR.Aneu,TR.MUneu,TR.Apos,TR.MUpos=TR.params
-          TR.SIGneg,TR.SIGneu,TR.SIGpos=(sigofmu(TR.params[1]),sigofmu(TR.params[3]),sigofmu(TR.params[5]))
-          tot=TR.params[0]+TR.params[2]+TR.params[4]
-          totalCounts=tot*TR.numbin/TR.Imax
-          TR.Pneg=TR.params[0]/tot #negative steady state
-          TR.Pneu=TR.params[2]/tot #neutral steady state
-          TR.Ppos=TR.params[4]/tot #positive steady state
-        elif var=='n':
-          succ=True
-          success=False
-        elif var!='':
-          print "Ain't nobody got time for that!"
-    elif var!='':
-      print "give me something I can work with!"
-  print 'Steady state probabilities (from multiple Gaussian fit):'
-  print 'Pneg: '+str('%.4f'%TR.Pneg)
-  print 'Pneu: '+str('%.4f'%TR.Pneu)
-  print 'Ppos: '+str('%.4f'%TR.Ppos)+'\n'
-  if np.abs(totalCounts-sum(TR.n))>(float(sum(TR.n))/100):
-    MESSAGE='---> WARNING: totalCounts is ' +str(totalCounts)
-    print '-'*len(MESSAGE)
-    print MESSAGE
-    print '-'*len(MESSAGE)+'\n'
-  return TR
-
 def get_guessparams(TR):
   #Q=0.007
   #gamma=1.7
@@ -278,45 +236,6 @@ def get_guessparams(TR):
   mu3=1.1*mu2  
   guessparams=(PoNEG*2*TR.Fs*TR.Imax/TR.numbin, mu1, PoNEU*2*TR.Fs*TR.Imax/TR.numbin, mu2, PoPOS*2*TR.Fs*TR.Imax/TR.numbin, mu3)
   return guessparams
-
-# clean data
-def cleanFT(I,highFreq=1.5):
-  # Current Trace:
-  Fs=1e4
-  T=float(len(I))/Fs
-  t=np.linspace(0,T,len(I))
-  # Fourier Transform:
-  FT=scipy.fftpack.fft(np.array(I))#,100)
-  freq=np.arange(float(len(FT)/2+1))/T
-  #highFreq=1.5
-  highInd=min(range(len(freq)), key=lambda i: abs(freq[i]-highFreq))
-  FTkeep=[]
-  FTkeep.extend(FT)
-  for x in range(highInd)[1:]:
-    FTkeep[x]=0
-    FTkeep[-x]=0
-  FTcut=[]
-  FTcut.extend(FT)
-  FTcut[0]=0
-  for x in range(len(FT))[highInd:-highInd]:
-    FTcut[x]=0
-  
-  Ikeep=scipy.fftpack.ifft(FTkeep)
-  Icut=scipy.fftpack.ifft(FTcut)
-  return Ikeep
-
-#show trace
-def showTrace(I):
-  t=[float(i)*1000/Fs for i in range(len(I))]
-  pb.clf()
-  pb.plot(t,I,'k',marker='.',linewidth=0.4)
-  pb.grid(True)
-  pb.xlim([200,400])
-  pb.ylim([0,40])
-  pb.xlabel('t (ms)')
-  pb.ylabel('I (pA)')
-  pb.show()
-  return
 
 def getItraj(TR,taumax):
   taumax=int(taumax*TR.Fs+1)
@@ -353,53 +272,13 @@ def smooth(TR):
   w=eval('np.'+window+'(window_len)')
   TR.y=np.convolve(w/w.sum(),s,mode='valid')
   TR.y=TR.y[5:-5]
-#  pb.plot(TR.x,TR.y,color=col1,linewidth=1)
-#  pb.show() 
 
 def peak_finder(TR):
   pk=np.r_[1, TR.y[1:] > TR.y[:-1]] & np.r_[TR.y[:-1] > TR.y[1:],1]
   for i in np.where(pk==1)[0]:
     TR.peak.append(TR.x[int(i)])
     TR.amp.append(TR.y[int(i)])
-
-#  TR.amp=zip(TR.amp,TR.peak)
-#  TR.amp=sorted(TR.amp, reverse=True)
-
-#  npeak=0
-#  n=0
-#  tmp=np.zeros((10,2))
-#  for i in pk:
-#    if i==1:
-##      TR.peak.append(TR.x[n])
-##      TR.amp.append(TR.y[n])
-#      tmp[npeak][0]=TR.x[n]    # peak position
-#      tmp[npeak][1]=TR.y[n]    # amplitude
-#      npeak+=1   
-#    n+=1
-#  tmp=sorted(tmp,key=itemgetter(1),reverse=True)
-#  tmp=tmp[0:3]
-#  tmp=sorted(tmp,key=itemgetter(0))
-#  TR.peak=tmp[0][0],tmp[1][0],tmp[2][0]
-#  TR.amp=tmp[0][1],tmp[1][1],tmp[2][1]
-
-#  print TR.peak
-#  print TR.amp
-#  pb.plot(TR.x,TR.y,color=col1,linewidth=1)
   pb.bar(TR.x,TR.n,float(TR.Imax)/TR.numbin,color='0.8',linewidth=0.4,align='center')
-#  pb.show()
-#  raise sys.exit()
-
-#def get_guessparams(TR):
-
-#  PoNEG=0.33
-#  PoNEU=0.33
-#  PoPOS=0.33
-#  mu2=TR.x[list(TR.n).index(max(TR.n))]
-#  mu1=0.9*mu2
-#  mu3=1.1*mu2  
-#  guessparams=(PoNEG*2*TR.Fs*TR.Imax/TR.numbin, mu1, PoNEU*2*TR.Fs*TR.Imax/TR.numbin, mu2, PoPOS*2*TR.Fs*TR.Imax/TR.numbin, mu3)
-#  guessparams=(TR.amp[0],TR.peak[0],TR.amp[1],TR.peak[1],TR.amp[2],TR.peak[2])
-#  return guessparams
 
 def threeGauss(p,x):
   A1, mu1, A2, mu2, A3, mu3 = p
@@ -449,8 +328,6 @@ def threeGaussFit(TR):
       TR.popt.append(popt[0])
       TR.popt.append(popt[1])
       TR.popt.append(popt[2])
-#      pb.plot(TR.x,oneGauss2(TR.x,popt[0],popt[1],popt[2]),color=col4,linewidth=1)
-#      pb.show()
       TR.n=TR.n-oneGauss2(TR.x,popt[0],popt[1],popt[2])
 
     elif len(TR.peak)==2:
@@ -459,9 +336,6 @@ def threeGaussFit(TR):
 
       for i in range(6):
         TR.popt.append(popt[i])
-  
-#      pb.plot(TR.x,twoGauss2(TR.x,popt[0],popt[1],popt[2],popt[3],popt[4],popt[5]),color=col4,linewidth=1)
-#      pb.show()
       TR.n=TR.n-twoGauss2(TR.x,popt[0],popt[1],popt[2],popt[3],popt[4],popt[5])
 
     else:
@@ -469,9 +343,6 @@ def threeGaussFit(TR):
       popt,pcov=curve_fit(threeGauss2,TR.x,TR.n,p0=[TR.peak[0],TR.amp[0],sig[0],TR.peak[1],TR.amp[1],sig[1],TR.peak[2],TR.amp[2],sig[2]])
       for i in range(9):
         TR.popt.append(popt[i])
-  
-#      pb.plot(TR.x,threeGauss2(TR.x,popt[0],popt[1],popt[2],popt[3],popt[4],popt[5],popt[6],popt[7],popt[8]),color=col4,linewidth=1)
-#      pb.show()
       TR.n=TR.n-threeGauss2(TR.x,popt[0],popt[1],popt[2],popt[3],popt[4],popt[5],popt[6],popt[7],popt[8])
 
 def hidden_peak(TR,filename):
@@ -516,38 +387,20 @@ def hidden_peak(TR,filename):
  
       for i in range(9):
         TR.popt.append(popt[i])
-#
-###
-  #pb.plot(x,nGauss2(x,TR.popt),color=col3,linewidth=1)
-###
   i=re.search('[0-9]+',filename)
-  #pb.savefig('figures/'+i.group()+'.png')
-  #pb.clf()
-
   return TR.popt
 
 #-#-#-#-#-#-# 
 #-#-#-#-#-#-# 
 
-def Analyze(filename,SHOW=False,SAVE=True):
+def Analyze(filename,SHOW=False,SAVE=True,taumax=10e-3):
   ## start analysis
-  TR=TRACE(filename) # initialize the trace object
-  TR.get_scanparams() # get bias and pos and dist
-  TR.getItrace() # add the data to TR.I
+  TR=TRACE(filename,numbin=1000,Imax=700) # initialize the trace object, get parameters, and read in the trace
   TR.getHist() # get histogram
-  histFit(TR)
-  smooth(TR)
-  peak_finder(TR)
-  threeGaussFit(TR)
-  TR.params=hidden_peak(TR,filename)
-  TR.resetHist()
-  TR.plotHist(SHOW=SHOW,SAVE=SAVE)
+  TR.fitHist() # fit histogram
+  TR.plotHist(SHOW=SHOW,SAVE=SAVE) # this is a slow step right now... but that may not be a big deal.
   return
-  #t1.smooth(TR)
-  #t1.peak_finder(TR)
-  #t1.threeGaussFit(TR)
   
-  taumax=10e-3 # 10 ms
   # get time correlations over three ranges
   getItraj(TR,taumax)
   IrangeNEG,IrangeNEU,IrangePOS,PoALL=three.ranges(TR.params)
