@@ -9,7 +9,7 @@ from scipy.optimize import curve_fit
 from scipy.optimize import leastsq
 #import pickle
 import matplotlib.pyplot as plt
-import threestate as three
+#import threestate as three
 from operator import itemgetter
 import re
 import scipy.special
@@ -218,8 +218,8 @@ class TRACE:
     pb.bar(self.x,self.n,float(self.Imax)/self.numbin,color='0.8',linewidth=0.4,align='center')
     if not skipfits:
       for i in range(len(params)/3):
-        pb.plot(np.linspace(0,100,500),nGauss(np.linspace(0,100,500),params[i*3:i*3+3]),color=colours[i],linewidth=1)
-      pb.plot(np.linspace(0,100,500),nGauss(np.linspace(0,100,500),params),'--k',linewidth=1)
+        pb.plot(np.linspace(0,100,500),nGauss(np.linspace(0,100,500),*params[i*3:i*3+3]),color=colours[i],linewidth=1)
+      pb.plot(np.linspace(0,100,500),nGauss(np.linspace(0,100,500),*params),'--k',linewidth=1)
     if self.ranges!=None:
       for i in range(len(self.ranges)):
         rn=self.ranges[i]
@@ -258,6 +258,7 @@ class TRACE:
         #
         ## here we need to fit the "correlation histogram"
         #
+        ## an asymptotically increasing quality assigned to the constrained fit will serve to eliminate the first few Ts
     return
     
   def resetHist(self):
@@ -266,41 +267,17 @@ class TRACE:
   
 ####
 
+#-#-# This needs to be replaced with something much more flexible:
+#-#-#
+
 def sigofmu(mu):
   sig=0.5+(1./20)*mu
   return sig
 
-def get_guessparams(TR):
-  #Q=0.007
-  #gamma=1.7
-  PoNEG=0.33
-  PoNEU=0.33
-  PoPOS=0.33
-  mu2=TR.x[list(TR.n).index(max(TR.n))]
-  mu1=0.9*mu2
-  mu3=1.1*mu2  
-  guessparams=(PoNEG*2*TR.Fs*TR.Imax/TR.numbin, mu1, PoNEU*2*TR.Fs*TR.Imax/TR.numbin, mu2, PoPOS*2*TR.Fs*TR.Imax/TR.numbin, mu3)
-  return guessparams
-
-def getItraj(TR,taumax):
-  taumax=int(taumax*TR.Fs+1)
-  print taumax
-  Itraj=[]
-  for k in range(len(TR.I)-taumax):
-    Itraj.append(TR.I[k:k+taumax])
-  Itraj.sort(key=lambda traj: traj[0])
-  TR.Itraj=Itraj
-  return
-
-#-#-# single gaussian fit:
+#-#-# flexible gaussian fit:
 #-#-#
-def oneGauss(p,x):
-  A, mu = p
-  sig=sigofmu(mu)
-  G=(A/(sig*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu)*(x-mu)/(sig*sig))
-  return G
-  
-def nGauss(x,params):
+
+def nGauss(x,*params):
   G=[]
   for i in range(len(params)/3):
     mu,A,sig=params[3*i:3*i+3]
@@ -325,70 +302,32 @@ def peak_finder(TR):
     TR.amp.append(TR.y[int(i)])
   pb.bar(TR.x,TR.n,float(TR.Imax)/TR.numbin,color='0.8',linewidth=0.4,align='center')
 
-def threeGauss(p,x):
-  A1, mu1, A2, mu2, A3, mu3 = p
-  sig1=sigofmu(mu1)
-  sig2=sigofmu(mu2)
-  sig3=sigofmu(mu3)
-  G1=(A1/(sig1*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu1)*(x-mu1)/(sig1*sig1))
-  G2=(A2/(sig2*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu2)*(x-mu2)/(sig2*sig2))
-  G3=(A3/(sig3*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu3)*(x-mu3)/(sig3*sig3))
-  return G1+G2+G3
-
-def threeGaussErr(p, x, n): 
-  error=threeGauss(p, x) - n
-  if min(p[0],p[2],p[4])<0:
-    error=1000*error
-  return error
-
-def oneGauss2(x,mu1=0.0,A1=0.0,sig1=0.0):
-  G1=(A1/(sig1*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu1)*(x-mu1)/(sig1*sig1))
-  return G1
-
-def twoGauss2(x,mu1=0.0,A1=0.0,sig1=0.0,mu2=0.0,A2=0.0,sig2=0.0):
-  G1=(A1/(sig1*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu1)*(x-mu1)/(sig1*sig1))
-  G2=(A2/(sig2*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu2)*(x-mu2)/(sig2*sig2))
-  return G1+G2
-
-def threeGauss2(x,mu1=0.0,A1=0.0,sig1=0.0,mu2=0.0,A2=0.0,sig2=0.0,mu3=0.0,A3=0.0,sig3=0.0):
-  G1=(A1/(sig1*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu1)*(x-mu1)/(sig1*sig1))
-  G2=(A2/(sig2*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu2)*(x-mu2)/(sig2*sig2))
-  G3=(A3/(sig3*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu3)*(x-mu3)/(sig3*sig3))
-  return G1+G2+G3
-
-def nGauss2(x,params):
-  G=[]
-  for i in range(len(params)/3):
-    mu,A,sig=params[3*i:3*i+3]
-    G.append((A/(sig*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu)*(x-mu)/(sig*sig)))
-  return sum(G)
-
 def threeGaussFit(TR):
   print len(TR.peak)
 
   if len(TR.peak)>0:
     if len(TR.peak)==1:
       sig=[sigofmu(TR.peak[0])]
-      popt,pcov=curve_fit(oneGauss2,TR.x,TR.n,p0=[TR.peak[0],TR.amp[0],sig[0]])
+      popt,pcov=curve_fit(nGauss,TR.x,TR.n,p0=[TR.peak[0],TR.amp[0],sig[0]])
       TR.popt.append(popt[0])
       TR.popt.append(popt[1])
       TR.popt.append(popt[2])
-      TR.n=TR.n-oneGauss2(TR.x,popt[0],popt[1],popt[2])
+      TR.n=TR.n-nGauss(TR.x,popt[0],popt[1],popt[2])
 
     elif len(TR.peak)==2:
       sig=[sigofmu(TR.peak[0]),sigofmu(TR.peak[1])]
-      popt,pcov=curve_fit(twoGauss2,TR.x,TR.n,p0=[TR.peak[0],TR.amp[0],sig[0],TR.peak[1],TR.amp[1],sig[1]])
+      popt,pcov=curve_fit(nGauss,TR.x,TR.n,p0=[TR.peak[0],TR.amp[0],sig[0],TR.peak[1],TR.amp[1],sig[1]])
 
       for i in range(6):
         TR.popt.append(popt[i])
-      TR.n=TR.n-twoGauss2(TR.x,popt[0],popt[1],popt[2],popt[3],popt[4],popt[5])
+      TR.n=TR.n-nGauss(TR.x,popt[0],popt[1],popt[2],popt[3],popt[4],popt[5])
 
     else:
       sig=[sigofmu(TR.peak[0]),sigofmu(TR.peak[1]),sigofmu(TR.peak[2])]
-      popt,pcov=curve_fit(threeGauss2,TR.x,TR.n,p0=[TR.peak[0],TR.amp[0],sig[0],TR.peak[1],TR.amp[1],sig[1],TR.peak[2],TR.amp[2],sig[2]])
+      popt,pcov=curve_fit(nGauss,TR.x,TR.n,p0=[TR.peak[0],TR.amp[0],sig[0],TR.peak[1],TR.amp[1],sig[1],TR.peak[2],TR.amp[2],sig[2]])
       for i in range(9):
         TR.popt.append(popt[i])
-      TR.n=TR.n-threeGauss2(TR.x,popt[0],popt[1],popt[2],popt[3],popt[4],popt[5],popt[6],popt[7],popt[8])
+      TR.n=TR.n-nGauss(TR.x,popt[0],popt[1],popt[2],popt[3],popt[4],popt[5],popt[6],popt[7],popt[8])
 
 def hidden_peak(TR):
   window_len=11
@@ -414,21 +353,21 @@ def hidden_peak(TR):
 
     if len(peak)==1:
       sig=[sigofmu(peak[0])]
-      popt,pcov=curve_fit(oneGauss2,x,n,p0=[peak[0],amp[0],sig[0]])
+      popt,pcov=curve_fit(nGauss,x,n,p0=[peak[0],amp[0],sig[0]])
       TR.popt.append(popt[0])
       TR.popt.append(popt[1])
       TR.popt.append(popt[2])
 
     elif len(peak)==2:
       sig=[sigofmu(peak[0]),sigofmu(peak[1])]
-      popt,pcov=curve_fit(twoGauss2,x,n,p0=[peak[0],amp[0],sig[0],peak[1],amp[1],sig[1]])
+      popt,pcov=curve_fit(nGauss,x,n,p0=[peak[0],amp[0],sig[0],peak[1],amp[1],sig[1]])
 
       for i in range(6):
         TR.popt.append(popt[i])
     
     else:
       sig=[sigofmu(peak[0]),sigofmu(peak[1]),sigofmu(peak[2])]
-      popt,pcov=curve_fit(threeGauss2,x,n,p0=[peak[0],amp[0],sig[0],peak[1],amp[1],sig[1],peak[2],amp[2],sig[2]])
+      popt,pcov=curve_fit(nGauss,x,n,p0=[peak[0],amp[0],sig[0],peak[1],amp[1],sig[1],peak[2],amp[2],sig[2]])
  
       for i in range(9):
         TR.popt.append(popt[i])
