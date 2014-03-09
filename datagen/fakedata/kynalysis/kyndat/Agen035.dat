@@ -300,3 +300,6 @@ BinCentre(pA)	BinMin(pA)	BinMax(pA)	Counts
 99.1666666667	99.0	99.3333333333	0
 99.5	99.3333333333	99.6666666667	0
 99.8333333333	99.6666666667	100.0	0
+#corr_range_0
+#corr_range_1
+#corr_range_2

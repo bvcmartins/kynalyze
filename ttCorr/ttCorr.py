@@ -199,7 +199,7 @@ class TRACE:
       self.ranges.append((self.params[3*i]-self.params[3*i+2],self.params[3*i]+self.params[3*i+2])) ## (Imin,Imax)
     return
   
-  #show histogram
+  #plot histogram
   def plotHist(self,pars=None,SHOW=True,SAVE=True): 
     skipfits=False
     if pars!=None: params=pars
@@ -240,7 +240,7 @@ class TRACE:
       for i in range(len(self.n)):
         f.write(str(self.x[i])+'\t'+str(self.bins[i])+'\t'+str(self.bins[i+1])+'\t'+str(self.n[i])+'\n')
       f.close
-    else: self.plotHist(SHOW=SHOW)
+    else: self.plotHist(SHOW=SHOW) # this looks problematic
     #if savename!=None:pb.savefig(savename)
     if SHOW:pb.show()
     return
@@ -248,21 +248,64 @@ class TRACE:
   def getCorr(self):
     Tmax=int(self.taumax*self.Fs) ## integer corresponding to the index
     
-    for rn in self.ranges:
+    #-#-# define the constrained gaussian function:
+    def nGauss_constrained(x,*amplitudes):
+      G=[]
+      for i in range(len(amplitudes)):
+        mu,A,sig=(self.params[3*i],amplitudes[i],self.params[3*i+2])
+        G.append((A/(sig*np.sqrt(2*np.pi)))*np.exp(-0.5*(x-mu)*(x-mu)/(sig*sig)))
+      return sum(G)
+    #-#-#
+    
+    self.Pcorr=np.zeros([len(self.ranges),len(self.params)/3,Tmax+1]) # Pcorr=[rangenumber,statenumber,T]
+    self.PcorrERR=np.zeros([len(self.ranges),len(self.params)/3,Tmax+1])
+    #self.ERRcorr=np.zeros([len(self.ranges),Tmax+1]) # Pcorr=[rangenumber,statenumber,T]
+    for irn in range(len(self.ranges)):
+      rn=self.ranges[irn]
       for T in range(Tmax+1):
         indeces=np.arange(len(self.I[:(-T)]))[(self.I[:(-T)]>rn[0])&(self.I[:(-T)]<rn[1])]+T
         Icorr=np.array(self.I)[indeces]
         nCorr,binsCorr=np.histogram(Icorr,bins=self.bins)
         xCorr=[0.5*(binsCorr[k]+binsCorr[k+1]) for k in range(len(binsCorr)-1)]
-        #if T==2:pb.bar(xCorr,nCorr,float(self.Imax)/self.numbin,color=col1,linewidth=0.4,align='center');pb.show()
-        #
-        ## here we need to fit the "correlation histogram"
-        #
-        ## an asymptotically increasing quality assigned to the constrained fit will serve to eliminate the first few Ts
+        amplitudes=self.params[1::3]
+        popt,pcov=curve_fit(nGauss_constrained,xCorr,nCorr,p0=amplitudes)
+        if not ((np.max(pcov)==np.inf)|(np.min(pcov)==-np.inf)): ## this ignores the first ugly data point, where the fits are bad
+          self.Pcorr[irn,:,T]=np.array(popt)/popt.sum()
+          self.PcorrERR[irn,:,T]=np.sqrt(np.diagonal(pcov))/popt.sum()
+        else:
+          self.Pcorr[irn,:,T]=np.nan
+          self.PcorrERR[irn,:,T]=np.nan
     return
     
   def resetHist(self):
     self.n=copy.deepcopy(self._n)
+    return
+  
+  #plot time-time correlations
+  def plotCorr(self,pars=None,SHOW=True,SAVE=True): 
+    skipfits=True
+    pb.clf()
+    for irn in range(len(self.ranges)):
+      for ist in range(len(self.params)/3):
+        pb.errorbar(np.arange(len(self.Pcorr[irn,ist,:]))/self.Fs,self.Pcorr[irn,ist,:],yerr=self.PcorrERR[irn,ist,:],color=colours[ist])
+      pb.ylim([0,1])
+      pb.grid(True)
+      pb.xlabel('Time (s)',fontsize=20)
+      pb.ylabel('Probabilities',fontsize=20)
+      pb.xticks(fontsize=16)
+      pb.yticks(fontsize=16)
+      if SAVE:
+        fn=os.path.basename(self.filename)
+        pb.savefig(self.figdir+'corr_'+'range_'+str(irn)+fn[:-4]+'.eps')
+        f=open(self.datdir+fn[:-4]+'.dat','a')
+        f.seek(0,2)
+        f.write('#corr_range_'+str(irn)+'\n')
+        #f.write('BinCentre(pA)\tBinMin(pA)\tBinMax(pA)\tCounts\n')
+        #for i in range(len(self.n)):
+        #  f.write(str(self.x[i])+'\t'+str(self.bins[i])+'\t'+str(self.bins[i+1])+'\t'+str(self.n[i])+'\n')
+        f.close()
+      if SHOW:pb.show()
+      pb.clf()
     return
   
 ####
@@ -303,7 +346,6 @@ def peak_finder(TR):
   pb.bar(TR.x,TR.n,float(TR.Imax)/TR.numbin,color='0.8',linewidth=0.4,align='center')
 
 def threeGaussFit(TR):
-  print len(TR.peak)
 
   if len(TR.peak)>0:
     if len(TR.peak)==1:
@@ -385,7 +427,8 @@ def Analyze(filename,SHOW=False,SAVE=True):
   TR.peakfilter()
   TR.getRanges() ## set TR.ranges
   TR.plotHist(SHOW=SHOW,SAVE=SAVE) ## this is a slow step right now... but that may not be a big deal.
-  TR.getCorr()
+  TR.getCorr() ## sets TR.Pcorr - a 3D array of conditional probabilities: Pcorr[initialrange,to_state,TAU]
+  TR.plotCorr(SHOW=SHOW,SAVE=SAVE) ## makes plots from Pcorr
   return
   
   ## get time correlations over three ranges
