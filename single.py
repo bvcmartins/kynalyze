@@ -24,7 +24,7 @@ class get_files:
 
 def main():         # read the files and process the Gaussians
   filename=sys.argv[1]
-  ttC.Analyze2(filename)
+  ttC.Analyze(filename)
        
 
 if __name__=='__main__':

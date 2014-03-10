@@ -106,6 +106,8 @@ class TRACE:
     self.amp = []
     self.popt = []
     self.sens = 10  # arbitrary parameter
+    self.radius = []
+    self.center = []
 ######
 
   def get_scanparams(self):
@@ -147,15 +149,18 @@ class TRACE:
       I=[]
       I.extend(Ifwd)
       I.extend(Ibwd)
-      self.I=[float(i)*1E12 for i in I]    #change units to pA
+#      self.I=[float(i)*1E12 for i in I] 
+      self.I=[float(i) for i in I]    #change units to pA  - Bruno 14-03-06: removed 1E12.
     else: #assume that it's one of my simple data files
       data=f.readlines()
-      self.I=[float(dt.split()[1])*1E12 for dt in data]
+#      self.I=[float(dt.split()[1])*1E12 for dt in data]
+      self.I=[float(dt.split()[1]) for dt in data]  # Bruno 14-03-06: removed 1E12.
+
     return None
 
   #make histogram data
   def getHist(self):
-    n,bins=np.histogram(self.I,bins=np.linspace(0,self.Imax,self.numbin+1))
+    n,bins=np.histogram(self.I,bins=np.linspace(min(self.I),max(self.I),0.3*self.numbin+1)) # Bruno 14-03-05: modified
     self.n=n
     self._n=copy.deepcopy(n) # this is a backup so that we can reset n later. It means we can smooth or alter n as much as we want and still return to the raw histogram.
     self.bins=bins
@@ -211,6 +216,7 @@ class TRACE:
 
 def sigofmu(mu):
   sig=0.5+(1./20)*mu
+#  sig=0.05+(1./20)*mu
   return sig
 
 def histFit(TR):
@@ -353,53 +359,31 @@ def smooth(TR):
   w=eval('np.'+window+'(window_len)')
   TR.y=np.convolve(w/w.sum(),s,mode='valid')
   TR.y=TR.y[5:-5]
-#  pb.plot(TR.x,TR.y,color=col1,linewidth=1)
+
+#  pb.bar(TR.x,TR.n,float(TR.Imax)/TR.numbin,color='0.8',linewidth=0.4,align='center')
+  pb.plot(TR.x,TR.y,color=col1,linewidth=1)
 #  pb.show() 
 
 def peak_finder(TR):
   pk=np.r_[1, TR.y[1:] > TR.y[:-1]] & np.r_[TR.y[:-1] > TR.y[1:],1]
   for i in np.where(pk==1)[0]:
-    TR.peak.append(TR.x[int(i)])
-    TR.amp.append(TR.y[int(i)])
+    if TR.y[int(i)]>TR.sens:
+      TR.peak.append(TR.x[int(i)])
+      TR.amp.append(TR.y[int(i)])
 
-#  TR.amp=zip(TR.amp,TR.peak)
-#  TR.amp=sorted(TR.amp, reverse=True)
+  for i in TR.amp:
+    k=int(np.where(TR.y==i)[0])
+    p=TR.x[k]
+    c=TR.y[k]/np.sqrt(2.)
+    while True:
+      if TR.y[k]<c:
+        break
+      k+=1
+    TR.radius.append(abs(p-TR.x[k]))
 
-#  npeak=0
-#  n=0
-#  tmp=np.zeros((10,2))
-#  for i in pk:
-#    if i==1:
-##      TR.peak.append(TR.x[n])
-##      TR.amp.append(TR.y[n])
-#      tmp[npeak][0]=TR.x[n]    # peak position
-#      tmp[npeak][1]=TR.y[n]    # amplitude
-#      npeak+=1   
-#    n+=1
-#  tmp=sorted(tmp,key=itemgetter(1),reverse=True)
-#  tmp=tmp[0:3]
-#  tmp=sorted(tmp,key=itemgetter(0))
-#  TR.peak=tmp[0][0],tmp[1][0],tmp[2][0]
-#  TR.amp=tmp[0][1],tmp[1][1],tmp[2][1]
-
-#  print TR.peak
-#  print TR.amp
-#  pb.plot(TR.x,TR.y,color=col1,linewidth=1)
-  pb.bar(TR.x,TR.n,float(TR.Imax)/TR.numbin,color='0.8',linewidth=0.4,align='center')
-#  pb.show()
-#  raise sys.exit()
-
-#def get_guessparams(TR):
-
-#  PoNEG=0.33
-#  PoNEU=0.33
-#  PoPOS=0.33
-#  mu2=TR.x[list(TR.n).index(max(TR.n))]
-#  mu1=0.9*mu2
-#  mu3=1.1*mu2  
-#  guessparams=(PoNEG*2*TR.Fs*TR.Imax/TR.numbin, mu1, PoNEU*2*TR.Fs*TR.Imax/TR.numbin, mu2, PoPOS*2*TR.Fs*TR.Imax/TR.numbin, mu3)
-#  guessparams=(TR.amp[0],TR.peak[0],TR.amp[1],TR.peak[1],TR.amp[2],TR.peak[2])
-#  return guessparams
+  print TR.peak
+  print TR.amp
+  print TR.radius
 
 def threeGauss(p,x):
   A1, mu1, A2, mu2, A3, mu3 = p
@@ -441,10 +425,10 @@ def nGauss2(x,params):
 
 def threeGaussFit(TR):
   print len(TR.peak)
-
+ 
   if len(TR.peak)>0:
     if len(TR.peak)==1:
-      sig=[sigofmu(TR.peak[0])]
+      sig=[TR.radius[0]]
       popt,pcov=curve_fit(oneGauss2,TR.x,TR.n,p0=[TR.peak[0],TR.amp[0],sig[0]])
       TR.popt.append(popt[0])
       TR.popt.append(popt[1])
@@ -454,9 +438,8 @@ def threeGaussFit(TR):
       TR.n=TR.n-oneGauss2(TR.x,popt[0],popt[1],popt[2])
 
     elif len(TR.peak)==2:
-      sig=[sigofmu(TR.peak[0]),sigofmu(TR.peak[1])]
+      sig=[TR.radius[0],TR.radius[1]]
       popt,pcov=curve_fit(twoGauss2,TR.x,TR.n,p0=[TR.peak[0],TR.amp[0],sig[0],TR.peak[1],TR.amp[1],sig[1]])
-
       for i in range(6):
         TR.popt.append(popt[i])
   
@@ -465,64 +448,91 @@ def threeGaussFit(TR):
       TR.n=TR.n-twoGauss2(TR.x,popt[0],popt[1],popt[2],popt[3],popt[4],popt[5])
 
     else:
-      sig=[sigofmu(TR.peak[0]),sigofmu(TR.peak[1]),sigofmu(TR.peak[2])]
+      sig=[TR.radius[0],TR.radius[1],TR.radius[2]]
       popt,pcov=curve_fit(threeGauss2,TR.x,TR.n,p0=[TR.peak[0],TR.amp[0],sig[0],TR.peak[1],TR.amp[1],sig[1],TR.peak[2],TR.amp[2],sig[2]])
       for i in range(9):
         TR.popt.append(popt[i])
   
-#      pb.plot(TR.x,threeGauss2(TR.x,popt[0],popt[1],popt[2],popt[3],popt[4],popt[5],popt[6],popt[7],popt[8]),color=col4,linewidth=1)
-#      pb.show()
+      pb.plot(TR.x,threeGauss2(TR.x,popt[0],popt[1],popt[2],popt[3],popt[4],popt[5],popt[6],popt[7],popt[8]),color=col4,linewidth=1)
+      pb.show()
       TR.n=TR.n-threeGauss2(TR.x,popt[0],popt[1],popt[2],popt[3],popt[4],popt[5],popt[6],popt[7],popt[8])
+
+  TR.sens=0.02*max(TR.y)
 
 def hidden_peak(TR,filename):
   window_len=11
   window='hanning'
-  s=np.r_[TR.n[window_len-1:0:-1],TR.n,TR.n[-1:-window_len:-1]]
+  s=np.r_[TR.n[window_len-2:0:-1],TR.n,TR.n[-1:-window_len:-1]]
   w=eval('np.'+window+'(window_len)')
   TR.y=np.convolve(w/w.sum(),s,mode='valid')
-  TR.y=TR.y[5:-5]
+  TR.y=TR.y[4:-5]
   pk=np.r_[1, TR.y[1:] > TR.y[:-1]] & np.r_[TR.y[:-1] > TR.y[1:],1]
-
+ 
   x=TR.x
   n=TR.n
  
   peak=[]
   amp=[]
+  radius=[]
+  radius2=[]
+
+#  pb.plot(TR.x,TR.y,color=col1,linewidth=1)
+#  pb.show() 
+
 
   for i in np.where(pk==1)[0]:
-    if TR.y[int(i)]>TR.sens:
-      peak.append(TR.x[int(i)])
-      amp.append(TR.y[int(i)])
+    min=TR.x[len(TR.x)-1]
+    if TR.x[int(i)] != TR.x[0] and TR.x[int(i)] != TR.x[len(TR.x)-1] and TR.y[int(i)]>TR.sens:
+      for j in TR.peak:
+        if abs(TR.x[int(i)]-j) < min :
+          min = abs(TR.x[int(i)]-j) 
+          min2 = 2*TR.radius[TR.peak.index(j)]
+      if min > min2:
+        peak.append(TR.x[int(i)])
+        amp.append(TR.y[int(i)])
+        radius.append(min)
+        radius2.append(min2)
+
+#  print TR.sens
+#  print peak
+#  print amp
+#  print radius
+#  print radius2
 
   if len(peak)>0:
+#    print len(peak)
 
     if len(peak)==1:
-      sig=[sigofmu(peak[0])]
+      sig=[radius[0]]
       popt,pcov=curve_fit(oneGauss2,x,n,p0=[peak[0],amp[0],sig[0]])
-      TR.popt.append(popt[0])
-      TR.popt.append(popt[1])
-      TR.popt.append(popt[2])
+      if popt[1]>0:
+        TR.popt.append(popt[0])
+        TR.popt.append(popt[1])
+        TR.popt.append(popt[2])
 
     elif len(peak)==2:
-      sig=[sigofmu(peak[0]),sigofmu(peak[1])]
+      sig=[radius[0],radius[1]]
       popt,pcov=curve_fit(twoGauss2,x,n,p0=[peak[0],amp[0],sig[0],peak[1],amp[1],sig[1]])
 
       for i in range(6):
         TR.popt.append(popt[i])
-    
-    else:
-      sig=[sigofmu(peak[0]),sigofmu(peak[1]),sigofmu(peak[2])]
-      popt,pcov=curve_fit(threeGauss2,x,n,p0=[peak[0],amp[0],sig[0],peak[1],amp[1],sig[1],peak[2],amp[2],sig[2]])
  
+    else:
+      sig=[radius[0],radius[1],radius[2]]
+      popt,pcov=curve_fit(threeGauss2,x,n,p0=[peak[0],amp[0],sig[0],peak[1],amp[1],sig[1],peak[2],amp[2],sig[2]])
+#      pb.plot(x,nGauss2(x,popt),color=col3,linewidth=1)
+#      pb.show()
+
       for i in range(9):
         TR.popt.append(popt[i])
-#
-###
-  #pb.plot(x,nGauss2(x,TR.popt),color=col3,linewidth=1)
-###
+
+#  print TR.popt
+  pb.plot(x,nGauss2(x,TR.popt),color=col3,linewidth=1)
+#  pb.show()
+
   i=re.search('[0-9]+',filename)
-  #pb.savefig('figures/'+i.group()+'.png')
-  #pb.clf()
+  pb.savefig('figures/'+i.group()+'.png')
+  pb.clf()
 
   return TR.popt
 
@@ -535,11 +545,12 @@ def Analyze(filename,SHOW=False,SAVE=True):
   TR.get_scanparams() # get bias and pos and dist
   TR.getItrace() # add the data to TR.I
   TR.getHist() # get histogram
-  histFit(TR)
+#  histFit(TR)
   smooth(TR)
   peak_finder(TR)
   threeGaussFit(TR)
   TR.params=hidden_peak(TR,filename)
+  return 
   TR.resetHist()
   TR.plotHist(SHOW=SHOW,SAVE=SAVE)
   return
