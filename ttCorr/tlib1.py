@@ -55,7 +55,8 @@ def peak_finder(TR):
 #  print TR.peak
 #  print TR.amp
 #  pb.plot(TR.x,TR.y,color=col1,linewidth=1)
-  pb.bar(TR.x,TR.n,float(TR.Imax)/TR.numbin,color='0.8',linewidth=0.4,align='center')
+#  pb.bar(TR.x,TR.n,float(TR.Imax)/TR.numbin,color='0.8',linewidth=0.4,align='center')
+  pb.bar(TR.x,TR.n,1000/TR.numbin,color='0.8',linewidth=0.4,align='center')
 #  pb.show()
 #  raise sys.exit()
 
@@ -119,8 +120,8 @@ def threeGaussFit(TR):
       TR.popt.append(popt[0])
       TR.popt.append(popt[1])
       TR.popt.append(popt[2])
-#      pb.plot(TR.x,oneGauss2(TR.x,popt[0],popt[1],popt[2]),color=col4,linewidth=1)
-#      pb.show()
+      pb.plot(TR.x,oneGauss2(TR.x,popt[0],popt[1],popt[2]),color=col4,linewidth=1)
+      pb.show()
       TR.n=TR.n-oneGauss2(TR.x,popt[0],popt[1],popt[2])
 
     elif len(TR.peak)==2:
@@ -130,8 +131,8 @@ def threeGaussFit(TR):
       for i in range(6):
         TR.popt.append(popt[i])
   
-#      pb.plot(TR.x,twoGauss2(TR.x,popt[0],popt[1],popt[2],popt[3],popt[4],popt[5]),color=col4,linewidth=1)
-#      pb.show()
+      pb.plot(TR.x,twoGauss2(TR.x,popt[0],popt[1],popt[2],popt[3],popt[4],popt[5]),color=col4,linewidth=1)
+      pb.show()
       TR.n=TR.n-twoGauss2(TR.x,popt[0],popt[1],popt[2],popt[3],popt[4],popt[5])
 
     else:
@@ -140,8 +141,8 @@ def threeGaussFit(TR):
       for i in range(9):
         TR.popt.append(popt[i])
   
-#      pb.plot(TR.x,threeGauss2(TR.x,popt[0],popt[1],popt[2],popt[3],popt[4],popt[5],popt[6],popt[7],popt[8]),color=col4,linewidth=1)
-#      pb.show()
+      pb.plot(TR.x,threeGauss2(TR.x,popt[0],popt[1],popt[2],popt[3],popt[4],popt[5],popt[6],popt[7],popt[8]),color=col4,linewidth=1)
+      pb.show()
       TR.n=TR.n-threeGauss2(TR.x,popt[0],popt[1],popt[2],popt[3],popt[4],popt[5],popt[6],popt[7],popt[8])
 
 def hidden_peak(TR,filename):
