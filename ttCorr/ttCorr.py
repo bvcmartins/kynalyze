@@ -1,18 +1,16 @@
 import sys
 import os
 import copy
+import re
+from operator import itemgetter
 import numpy as np
-import pylab as pb
 import scipy.fftpack
+import scipy.special
 import scipy.special
 from scipy.optimize import curve_fit
 from scipy.optimize import leastsq
-#import pickle
+import pylab as pb
 import matplotlib.pyplot as plt
-#import threestate as three
-from operator import itemgetter
-import re
-import scipy.special
 
 col1='#FF7A00'
 col2='#03899C'
@@ -192,6 +190,10 @@ class TRACE:
     self.params=[]
     for i in range(len(temp)): self.params+=temp[i]
     return
+    
+  def resetHist(self):
+    self.n=copy.deepcopy(self._n)
+    return
   
   def getRanges(self):
     self.ranges=[]
@@ -276,10 +278,11 @@ class TRACE:
           self.Pcorr[irn,:,T]=np.nan
           self.PcorrERR[irn,:,T]=np.nan
     return
-    
-  def resetHist(self):
-    self.n=copy.deepcopy(self._n)
+  
+  def fitCorr(self):
+    Gamma
     return
+    
   
   #plot time-time correlations
   def plotCorr(self,pars=None,SHOW=True,SAVE=True): 
@@ -426,9 +429,10 @@ def Analyze(filename,SHOW=False,SAVE=True):
   TR.fitHist() ## fit histogram - set TR.params
   TR.peakfilter()
   TR.getRanges() ## set TR.ranges
-  TR.plotHist(SHOW=SHOW,SAVE=SAVE) ## this is a slow step right now... but that may not be a big deal.
+  TR.plotHist(SHOW=SHOW,SAVE=SAVE) ## Makes a plot of the histogram.
   TR.getCorr() ## sets TR.Pcorr - a 3D array of conditional probabilities: Pcorr[initialrange,to_state,TAU]
-  TR.plotCorr(SHOW=SHOW,SAVE=SAVE) ## makes plots from Pcorr
+  TR.plotCorr(SHOW=SHOW,SAVE=SAVE) ## makes plots from Pcorr.
+  #TR.fitCorr() # fit the correlation plots to get transition rates
   return
   
   ## get time correlations over three ranges
