@@ -106,7 +106,6 @@ class TRACE:
     self.popt = []
     self.sens = 10  # arbitrary parameter
     self.radius = []
-    self.center = []
 ######
     ## based on subsequent methods
     self.get_scanparams()
@@ -346,8 +345,8 @@ def smooth(TR):
   w=eval('np.'+window+'(window_len)')
   TR.y=np.convolve(w/w.sum(),s,mode='valid')
   TR.y=TR.y[5:-5]
-#  pb.bar(TR.x,TR.n,float(TR.Imax)/TR.numbin,color='0.8',linewidth=0.4,align='center')
-  pb.plot(TR.x,TR.y,color=col1,linewidth=1)
+  pb.bar(TR.x,TR.n,float(TR.Imax)/TR.numbin,color='0.8',linewidth=0.4,align='center')
+#  pb.plot(TR.x,TR.y,color=col1,linewidth=1)
 #  pb.show() 
 
 def peak_finder(TR):
@@ -366,10 +365,6 @@ def peak_finder(TR):
         break
       k+=1
     TR.radius.append(abs(p-TR.x[k]))
-
-  print TR.peak
-  print TR.amp
-  print TR.radius
 
 def threeGauss(p,x):
   A1, mu1, A2, mu2, A3, mu3 = p
@@ -393,7 +388,7 @@ def threeGaussFit(TR):
   if len(TR.peak)>0:
     if len(TR.peak)==1:
       sig=[TR.radius[0]]
-      popt,pcov=curve_fit(oneGauss2,TR.x,TR.n,p0=[TR.peak[0],TR.amp[0],sig[0]])
+      popt,pcov=curve_fit(nGauss,TR.x,TR.n,p0=[TR.peak[0],TR.amp[0],sig[0]])
       TR.popt.append(popt[0])
       TR.popt.append(popt[1])
       TR.popt.append(popt[2])
@@ -412,11 +407,12 @@ def threeGaussFit(TR):
       for i in range(9):
         TR.popt.append(popt[i])
   
-      pb.plot(TR.x,nGauss(TR.x,popt[0],popt[1],popt[2],popt[3],popt[4],popt[5],popt[6],popt[7],popt[8]),color=col4,linewidth=1)
-      pb.show()
+#      pb.plot(TR.x,nGauss(TR.x,popt[0],popt[1],popt[2],popt[3],popt[4],popt[5],popt[6],popt[7],popt[8]),color=col4,linewidth=1)
+#     pb.show()
       TR.n=TR.n-nGauss(TR.x,popt[0],popt[1],popt[2],popt[3],popt[4],popt[5],popt[6],popt[7],popt[8])
 
-  TR.sens=0.02*max(TR.y)
+#  TR.sens=0.01*max(TR.y)
+  TR.sens=0.017*max(TR.y)
 
 def hidden_peak(TR):
   window_len=11
@@ -426,6 +422,10 @@ def hidden_peak(TR):
   TR.y=np.convolve(w/w.sum(),s,mode='valid')
   TR.y=TR.y[4:-5]
   pk=np.r_[1, TR.y[1:] > TR.y[:-1]] & np.r_[TR.y[:-1] > TR.y[1:],1]
+
+#  pb.plot(TR.x,TR.y,color=col1,linewidth=1)
+#  pb.show() 
+
  
   x=TR.x
   n=TR.n
@@ -435,31 +435,28 @@ def hidden_peak(TR):
   radius=[]
   radius2=[]
 
-#  pb.plot(TR.x,TR.y,color=col1,linewidth=1)
-#  pb.show() 
-
-
+#  print TR.sens
   for i in np.where(pk==1)[0]:
     min=TR.x[len(TR.x)-1]
+#    print TR.y[int(i)]
     if TR.x[int(i)] != TR.x[0] and TR.x[int(i)] != TR.x[len(TR.x)-1] and TR.y[int(i)]>TR.sens:
       for j in TR.peak:
         if abs(TR.x[int(i)]-j) < min :
           min = abs(TR.x[int(i)]-j) 
           min2 = 2*TR.radius[TR.peak.index(j)]
+          radius2.append(min2)
       if min > min2:
         peak.append(TR.x[int(i)])
         amp.append(TR.y[int(i)])
         radius.append(min)
-        radius2.append(min2)
 
 #  print TR.sens
 #  print peak
 #  print amp
-#  print radius
+#  print radius  
 #  print radius2
 
   if len(peak)>0:
-#    print len(peak)
 
     if len(peak)==1:
       sig=[radius[0]]
@@ -502,11 +499,11 @@ def Analyze(filename,SHOW=False,SAVE=True):
   TR=TRACE(filename) # initialize the trace object, get parameters, and read in the trace
   TR.getHist() ## get histogram - set TR.bins, TR.x, TR.n
   TR.fitHist() ## fit histogram - set TR.params
-  TR.peakfilter()
-  TR.getRanges() ## set TR.ranges
-  TR.plotHist(SHOW=SHOW,SAVE=SAVE) ## Makes a plot of the histogram.
-  TR.getCorr() ## sets TR.Pcorr - a 3D array of conditional probabilities: Pcorr[initialrange,to_state,TAU]
-  TR.plotCorr(SHOW=SHOW,SAVE=SAVE) ## makes plots from Pcorr.
+#  TR.peakfilter()
+#  TR.getRanges() ## set TR.ranges
+#  TR.plotHist(SHOW=SHOW,SAVE=SAVE) ## Makes a plot of the histogram.
+#  TR.getCorr() ## sets TR.Pcorr - a 3D array of conditional probabilities: Pcorr[initialrange,to_state,TAU]
+#  TR.plotCorr(SHOW=SHOW,SAVE=SAVE) ## makes plots from Pcorr.
   #TR.fitCorr() # fit the correlation plots to get transition rates
   return
   
