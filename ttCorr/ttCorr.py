@@ -345,7 +345,7 @@ def smooth(TR):
   w=eval('np.'+window+'(window_len)')
   TR.y=np.convolve(w/w.sum(),s,mode='valid')
   TR.y=TR.y[5:-5]
-  pb.bar(TR.x,TR.n,float(TR.Imax)/TR.numbin,color='0.8',linewidth=0.4,align='center')
+#  pb.bar(TR.x,TR.n,float(TR.Imax)/TR.numbin,color='0.8',linewidth=0.4,align='center')
 #  pb.plot(TR.x,TR.y,color=col1,linewidth=1)
 #  pb.show() 
 
@@ -383,7 +383,6 @@ def threeGaussErr(p, x, n):
   return error
 
 def threeGaussFit(TR):
-  print len(TR.peak)
  
   if len(TR.peak)>0:
     if len(TR.peak)==1:
@@ -411,8 +410,9 @@ def threeGaussFit(TR):
 #     pb.show()
       TR.n=TR.n-nGauss(TR.x,popt[0],popt[1],popt[2],popt[3],popt[4],popt[5],popt[6],popt[7],popt[8])
 
+#  TR.sens=0.1*max(TR.y)
 #  TR.sens=0.01*max(TR.y)
-  TR.sens=0.017*max(TR.y)
+  TR.sens=0.017*max(TR.y)  # this parameter works well. Must find a more robust method to choose the peaks.
 
 def hidden_peak(TR):
   window_len=11
